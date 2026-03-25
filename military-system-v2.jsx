@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, Component } from "react";
+import { syncUsersToDb, syncDeploymentsToDb, loadUsersFromDb, loadDeploymentsFromDb } from './supabaseSync.js';
 /* ── Error Boundary — תופס שגיאות render ── */
 class ErrorBoundary extends Component {
  constructor(props) { super(props); this.state = { error: null }; }
@@ -380,11 +381,14 @@ function AppInner() {
   setTimeout(() => setNotification(null), 3500); };
  useEffect(() => {
   (async () => {
-   const storedUsers = await sGet("tac:users", true);
-   const storedDeps = await sGet("tac:deployments", true);
+   // Try loading from Supabase first, fall back to localStorage
+   let storedUsers = await loadUsersFromDb().catch(()=>null);
+   let storedDeps = await loadDeploymentsFromDb().catch(()=>null);
+   if (!storedUsers) storedUsers = await sGet("tac:users", true);
+   if (!storedDeps) storedDeps = await sGet("tac:deployments", true);
    const session = await sGet("tac:session", false);
-   if (storedUsers) setUsers(storedUsers);
-   if (storedDeps) setDeployments(storedDeps);
+   if (storedUsers) { setUsers(storedUsers); await sSet("tac:users", storedUsers, true); }
+   if (storedDeps) { setDeployments(storedDeps); await sSet("tac:deployments", storedDeps, true); }
    const urlParams = new URLSearchParams(window.location.search);
    const inviteToken = urlParams.get("invite");
    if (inviteToken) {
@@ -420,11 +424,13 @@ function AppInner() {
   isSaving.current = true;
   setUsers(u);
   await sSet("tac:users", u, true);
+  syncUsersToDb(u).catch(()=>{});
   isSaving.current = false; }
  async function saveDeps(d) {
   isSaving.current = true;
   setDeployments(d);
   await sSet("tac:deployments", d, true);
+  syncDeploymentsToDb(d).catch(()=>{});
   isSaving.current = false; }
  async function updateDep(fn) {
   const next = deployments.map(d => d.id===currentDepId ? fn(d) : d);
