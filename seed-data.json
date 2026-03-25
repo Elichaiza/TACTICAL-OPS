@@ -1,0 +1,59 @@
+{
+  "users": [
+    {
+      "id": "admin001",
+      "email": "elichaiza@gmail.com",
+      "name": "אליחי",
+      "role": "admin",
+      "passwordHash": "a665226492ff4041f4750f60e319f80af3d721f9329f8b091a29ef40ce90ba30",
+      "createdAt": "2026-03-25T00:00:00.000Z"
+    }
+  ],
+  "deployments": [
+    {
+      "id": "dep_iran_001",
+      "name": "איראן",
+      "soldiers": [
+        { "id": "s001", "name": "אבנר פנחסי", "role": "חייל", "phone": "058-5323433", "notes": "", "certifications": [] },
+        { "id": "s002", "name": "אהרון בסוס", "role": "חייל", "phone": "054-5526575", "notes": "", "certifications": [] },
+        { "id": "s003", "name": "אודי אלגרבלי", "role": "חייל", "phone": "054-5666618", "notes": "", "certifications": [] },
+        { "id": "s004", "name": "אוהד שילה", "role": "חייל", "phone": "052-9574584", "notes": "", "certifications": [] },
+        { "id": "s005", "name": "אורי רונן", "role": "חייל", "phone": "055-6621497", "notes": "", "certifications": [] },
+        { "id": "s006", "name": "אייל מדמון", "role": "חייל", "phone": "052-8986558", "notes": "", "certifications": [] },
+        { "id": "s007", "name": "איתי מתנה", "role": "חייל", "phone": "050-5754577", "notes": "", "certifications": [] },
+        { "id": "s008", "name": "איתם רוזנברג", "role": "חייל", "phone": "058-4440136", "notes": "", "certifications": [] },
+        { "id": "s009", "name": "אליאב דבח", "role": "חייל", "phone": "050-8583482", "notes": "", "certifications": [] },
+        { "id": "s010", "name": "אליאור חמו", "role": "חייל", "phone": "053-4281245", "notes": "", "certifications": [] },
+        { "id": "s011", "name": "אליחי זרגריאן", "role": "חייל", "phone": "054-7571682", "notes": "", "certifications": [] },
+        { "id": "s012", "name": "אליעד גוטליב", "role": "חייל", "phone": "050-5782105", "notes": "", "certifications": [] },
+        { "id": "s013", "name": "אלישע מליחי", "role": "חייל", "phone": "058-7787712", "notes": "", "certifications": [] },
+        { "id": "s014", "name": "אריה קופל", "role": "חייל", "phone": "054-8006043", "notes": "", "certifications": [] },
+        { "id": "s015", "name": "דביר ביתן", "role": "חייל", "phone": "054-6243338", "notes": "", "certifications": [] },
+        { "id": "s016", "name": "דביר פולק", "role": "חייל", "phone": "058-7887351", "notes": "", "certifications": [] },
+        { "id": "s017", "name": "דניאל שטרימברג", "role": "חייל", "phone": "052-6126070", "notes": "", "certifications": [] },
+        { "id": "s018", "name": "חגי דרשן", "role": "חייל", "phone": "058-7929508", "notes": "", "certifications": [] },
+        { "id": "s019", "name": "ידידיה נוילנדר", "role": "חייל", "phone": "058-4242529", "notes": "", "certifications": [] },
+        { "id": "s020", "name": "יואל גורדון", "role": "חייל", "phone": "058-5213213", "notes": "", "certifications": [] },
+        { "id": "s021", "name": "יובל אלזמי", "role": "חייל", "phone": "052-3677976", "notes": "", "certifications": [] },
+        { "id": "s022", "name": "יוסף חדד", "role": "חייל", "phone": "054-6447403", "notes": "", "certifications": [] },
+        { "id": "s023", "name": "יוסף צ'יקו", "role": "חייל", "phone": "054-7366734", "notes": "", "certifications": [] },
+        { "id": "s024", "name": "ינון עזרא", "role": "חייל", "phone": "055-8844075", "notes": "", "certifications": [] },
+        { "id": "s025", "name": "יצחק טייכר", "role": "חייל", "phone": "053-3317827", "notes": "", "certifications": [] },
+        { "id": "s026", "name": "ירין מלכה", "role": "חייל", "phone": "053-6805136", "notes": "", "certifications": [] },
+        { "id": "s027", "name": "נועם יורב", "role": "חייל", "phone": "054-3224900", "notes": "", "certifications": [] },
+        { "id": "s028", "name": "ניסן מורטוב", "role": "חייל", "phone": "052-2318803", "notes": "", "certifications": [] },
+        { "id": "s029", "name": "ניתאי בתאשוילי", "role": "חייל", "phone": "050-2211864", "notes": "", "certifications": [] },
+        { "id": "s030", "name": "נריה בר שלום", "role": "חייל", "phone": "052-2862664", "notes": "", "certifications": [] },
+        { "id": "s031", "name": "נריה טויטו", "role": "חייל", "phone": "054-4639573", "notes": "", "certifications": [] },
+        { "id": "s032", "name": "עדיאל נדב", "role": "חייל", "phone": "055-8813738", "notes": "", "certifications": [] },
+        { "id": "s033", "name": "עמית ברדע", "role": "חייל", "phone": "050-7770614", "notes": "", "certifications": [] },
+        { "id": "s034", "name": "ראובן צעידי", "role": "חייל", "phone": "053-2829856", "notes": "", "certifications": [] },
+        { "id": "s035", "name": "שחף גמיל", "role": "חייל", "phone": "052-3319302", "notes": "", "certifications": [] },
+        { "id": "s036", "name": "שי קרני", "role": "חייל", "phone": "054-3269002", "notes": "", "certifications": [] }
+      ],
+      "missions": [],
+      "attendance": {},
+      "assignments": []
+    }
+  ]
+}
