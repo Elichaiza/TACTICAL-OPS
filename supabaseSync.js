@@ -1,6 +1,21 @@
 import { supabase } from './supabaseClient.js';
 
 // ============================================================
+// RETRY HELPER — retries a Supabase call up to N times with delay
+// ============================================================
+async function withRetry(fn, retries = 3, delayMs = 800) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const result = await fn();
+      return result;
+    } catch (e) {
+      if (i === retries - 1) throw e;
+      await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+}
+
+// ============================================================
 // USERS - sync between app format and Supabase
 // ============================================================
 
