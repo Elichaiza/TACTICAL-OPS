@@ -567,7 +567,6 @@ function AppInner() {
  const [notification, setNotification] = useState(null);
  const [dataLoaded, setDataLoaded] = useState(false);
  const isSaving = useRef(false);
- const lastSaveTime = useRef(0);
  const notify = (msg, type="success") => {
   setNotification({ msg, type });
   setTimeout(() => setNotification(null), 3500); };
