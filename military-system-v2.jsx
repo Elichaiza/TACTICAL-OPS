@@ -1661,9 +1661,9 @@ function AttendanceTab({ dep, updateDep, notify }) {
    {view==="table" && <>
     
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-     <button onClick={()=>dep.soldiers.forEach(s=>mark(s.id,"present"))} style={{...S.btnSmall,borderColor:"#4ade80",color:"#4ade80"}}>✓ כולם בבסיס</button>
-     <button onClick={()=>dep.soldiers.forEach(s=>mark(s.id,"absent"))}  style={{...S.btnSmall,borderColor:"#f87171",color:"#f87171"}}>✗ כולם בבית</button>
-     <button onClick={()=>dep.soldiers.forEach(s=>mark(s.id,null))}      style={S.btnSmall}>↺ נקה הכל</button>
+     <button onClick={()=>markAll("present")} style={{...S.btnSmall,borderColor:"#4ade80",color:"#4ade80"}}>✓ כולם בבסיס</button>
+     <button onClick={()=>markAll("absent")}  style={{...S.btnSmall,borderColor:"#f87171",color:"#f87171"}}>✗ כולם בבית</button>
+     <button onClick={()=>clearAll()}      style={S.btnSmall}>↺ נקה הכל</button>
      <div style={{marginRight:"auto",display:"flex",gap:6}}>
       <input placeholder="🔍 חיפוש..." value={search} onChange={e=>setSearch(e.target.value)}
        style={{...S.input,padding:"4px 10px",fontSize:12,width:130}}/>
