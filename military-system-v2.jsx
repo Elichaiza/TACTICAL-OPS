@@ -602,7 +602,7 @@ function AppInner() {
  }, []);
  useEffect(() => {
   if (!dataLoaded) return;
-  /* ── localStorage sync (fast, every 5s) ── */
+  /* ── localStorage sync (every 5s) — keeps React in sync with localStorage ── */
   const localInterval = setInterval(async () => {
    if (isSaving.current) return;
    const storedDeps = await sGet("tac:deployments", true);
@@ -611,28 +611,10 @@ function AppInner() {
    if (storedDeps) setDeployments(storedDeps);
    if (storedUsers) setUsers(storedUsers);
   }, 5000);
-  /* ── Supabase cloud sync (every 30s) — pulls remote changes only if idle ── */
-  const cloudInterval = setInterval(async () => {
-   if (isSaving.current) return;
-   // Skip cloud pull if user saved locally in the last 30 seconds
-   if (Date.now() - lastSaveTime.current < 30000) return;
-   try {
-    const cloudDeps = await loadDeploymentsFromDb();
-    const cloudUsers = await loadUsersFromDb();
-    if (isSaving.current) return;
-    // Double-check no save happened while we were fetching
-    if (Date.now() - lastSaveTime.current < 30000) return;
-    if (cloudDeps && cloudDeps.length > 0) {
-     setDeployments(cloudDeps);
-     await sSet("tac:deployments", cloudDeps, true);
-    }
-    if (cloudUsers && cloudUsers.length > 0) {
-     setUsers(cloudUsers);
-     await sSet("tac:users", cloudUsers, true);
-    }
-   } catch(e) { /* silent — retry next cycle */ }
-  }, 30000);
-  return () => { clearInterval(localInterval); clearInterval(cloudInterval); };
+  /* Cloud sync happens ONLY on page load (in the useEffect above).
+     No periodic pulling — it causes data loss when Supabase is behind.
+     Push to Supabase happens on every save (saveDeps/saveUsers). */
+  return () => clearInterval(localInterval);
  }, [dataLoaded]);
  async function saveUsers(u) {
   isSaving.current = true;
