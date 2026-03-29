@@ -601,7 +601,8 @@ function AppInner() {
  }, []);
  useEffect(() => {
   if (!dataLoaded) return;
-  const interval = setInterval(async () => {
+  /* ── localStorage sync (fast, every 5s) ── */
+  const localInterval = setInterval(async () => {
    if (isSaving.current) return;
    const storedDeps = await sGet("tac:deployments", true);
    const storedUsers = await sGet("tac:users", true);
@@ -609,7 +610,24 @@ function AppInner() {
    if (storedDeps) setDeployments(storedDeps);
    if (storedUsers) setUsers(storedUsers);
   }, 5000);
-  return () => clearInterval(interval);
+  /* ── Supabase cloud sync (every 15s) — pulls remote changes ── */
+  const cloudInterval = setInterval(async () => {
+   if (isSaving.current) return;
+   try {
+    const cloudDeps = await loadDeploymentsFromDb();
+    const cloudUsers = await loadUsersFromDb();
+    if (isSaving.current) return;
+    if (cloudDeps && cloudDeps.length > 0) {
+     setDeployments(cloudDeps);
+     await sSet("tac:deployments", cloudDeps, true);
+    }
+    if (cloudUsers && cloudUsers.length > 0) {
+     setUsers(cloudUsers);
+     await sSet("tac:users", cloudUsers, true);
+    }
+   } catch(e) { /* silent — retry next cycle */ }
+  }, 15000);
+  return () => { clearInterval(localInterval); clearInterval(cloudInterval); };
  }, [dataLoaded]);
  async function saveUsers(u) {
   isSaving.current = true;
