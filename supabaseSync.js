@@ -3,13 +3,20 @@ import { supabase } from './supabaseClient.js';
 // ============================================================
 // RETRY HELPER — retries a Supabase call up to N times with delay
 // ============================================================
-async function withRetry(fn, retries = 3, delayMs = 800) {
+async function withRetry(fn, retries = 3, delayMs = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
       const result = await fn();
+      // Supabase returns {error} instead of throwing — retry on network errors
+      if (result?.error?.message?.includes('Failed to fetch') && i < retries - 1) {
+        console.log(`[Supabase] retry ${i + 1}/${retries}...`);
+        await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+        continue;
+      }
       return result;
     } catch (e) {
       if (i === retries - 1) throw e;
+      console.log(`[Supabase] retry ${i + 1}/${retries} (exception)...`);
       await new Promise(r => setTimeout(r, delayMs * (i + 1)));
     }
   }
