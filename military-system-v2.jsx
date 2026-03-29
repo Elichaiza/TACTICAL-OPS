@@ -270,7 +270,14 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   if (worked + slot.dur > MAX_DAILY) return false;
   return true; }
  function lv3(soldier, slot) {
-  return hardOk(soldier, slot); }
+  if (!hardOk(soldier, slot)) return false;
+  /* 8 שעות מקסימום ליום — חוק קשיח */
+  const st = state[soldier.id];
+  const ws = slot.endAbs - 1440;
+  const worked = st.busySlots.reduce(
+   (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, ws)), 0);
+  if (worked + slot.dur > MAX_DAILY) return false;
+  return true; }
  /* ── 4. דירוג חיילים — totalMins ראשון, גיוון משימות כ-tiebreaker ── */
  const missionSeed = {};
  missions.forEach((m, i) => { missionSeed[m.id] = i; });
