@@ -218,7 +218,7 @@ async function syncAssignmentsForDep(dep) {
 
 export async function loadDeploymentsFromDb() {
   try {
-    const { data: deps, error: depErr } = await supabase.from('deployments').select('*');
+    const { data: deps, error: depErr } = await withRetry(() => supabase.from('deployments').select('*'));
     if (depErr) { console.error('[Supabase] loadDeployments error:', depErr.message); return null; }
     if (!deps || deps.length === 0) return null;
 
