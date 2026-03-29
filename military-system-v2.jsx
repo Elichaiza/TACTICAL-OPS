@@ -1487,6 +1487,32 @@ function AttendanceTab({ dep, updateDep, notify }) {
    }}};
   }); }
  function mark(id, status) { setField(id, "status", status); }
+ function markAll(status) {
+  updateDep(d => {
+   const dayRec = { ...(d.attendance?.[selectedDate] || {}) };
+   dep.soldiers.forEach(s => {
+    const prev = dayRec[s.id];
+    const prevObj = typeof prev === "string"
+     ? { status: prev, note: "", from: "10:00", to: "10:00" }
+     : { status: "unknown", note: "", from: "10:00", to: "10:00", ...(prev || {}) };
+    dayRec[s.id] = { ...prevObj, status };
+   });
+   return { ...d, attendance: { ...d.attendance, [selectedDate]: dayRec } };
+  });
+ }
+ function clearAll() {
+  updateDep(d => {
+   const dayRec = { ...(d.attendance?.[selectedDate] || {}) };
+   dep.soldiers.forEach(s => {
+    const prev = dayRec[s.id];
+    const prevObj = typeof prev === "string"
+     ? { status: prev, note: "", from: "10:00", to: "10:00" }
+     : { status: "unknown", note: "", from: "10:00", to: "10:00", ...(prev || {}) };
+    dayRec[s.id] = { ...prevObj, status: null };
+   });
+   return { ...d, attendance: { ...d.attendance, [selectedDate]: dayRec } };
+  });
+ }
  const presentIds = dep.soldiers.filter(s=>getAttStatus(rec[s.id])==="present").map(s=>s.id);
  const absentIds  = dep.soldiers.filter(s=>getAttStatus(rec[s.id])==="absent").map(s=>s.id);
  const unknownCnt = dep.soldiers.length - presentIds.length - absentIds.length;
