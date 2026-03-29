@@ -298,7 +298,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  });
  const sortedDays = Object.keys(dayGroups).map(Number).sort((a, b) => a - b);
  for (const day of sortedDays) {
-  present.forEach(s => { state[s.id].busySlots = []; });
+  /* busySlots לא מאופסים — כדי לשמור על 8 שעות מנוחה בין ימים */
   const daySlots = dayGroups[day];
   let progress = true;
   while (progress) {
