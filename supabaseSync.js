@@ -50,7 +50,7 @@ export async function syncUsersToDb(users) {
 
 export async function loadUsersFromDb() {
   try {
-    const { data, error } = await supabase.from('users').select('*');
+    const { data, error } = await withRetry(() => supabase.from('users').select('*'));
     if (error) { console.error('[Supabase] loadUsers error:', error.message); return null; }
     if (!data || data.length === 0) return null;
     return data.map(r => ({
