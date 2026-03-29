@@ -232,20 +232,20 @@ export async function loadDeploymentsFromDb() {
     const result = [];
     for (const dep of deps) {
       // Fetch soldiers
-      const { data: soldiers } = await supabase
-        .from('soldiers').select('*').eq('deployment_id', dep.id);
+      const { data: soldiers } = await withRetry(() =>
+        supabase.from('soldiers').select('*').eq('deployment_id', dep.id));
 
       // Fetch missions
-      const { data: missions } = await supabase
-        .from('missions').select('*').eq('deployment_id', dep.id);
+      const { data: missions } = await withRetry(() =>
+        supabase.from('missions').select('*').eq('deployment_id', dep.id));
 
       // Fetch attendance
-      const { data: attRows } = await supabase
-        .from('attendance').select('*').eq('deployment_id', dep.id);
+      const { data: attRows } = await withRetry(() =>
+        supabase.from('attendance').select('*').eq('deployment_id', dep.id));
 
       // Fetch assignments
-      const { data: assignRows } = await supabase
-        .from('assignments').select('*').eq('deployment_id', dep.id);
+      const { data: assignRows } = await withRetry(() =>
+        supabase.from('assignments').select('*').eq('deployment_id', dep.id));
 
       // Reconstruct attendance map: { date: { soldierId: record } }
       const attendance = {};
