@@ -611,13 +611,17 @@ function AppInner() {
    if (storedDeps) setDeployments(storedDeps);
    if (storedUsers) setUsers(storedUsers);
   }, 5000);
-  /* ── Supabase cloud sync (every 15s) — pulls remote changes ── */
+  /* ── Supabase cloud sync (every 30s) — pulls remote changes only if idle ── */
   const cloudInterval = setInterval(async () => {
    if (isSaving.current) return;
+   // Skip cloud pull if user saved locally in the last 30 seconds
+   if (Date.now() - lastSaveTime.current < 30000) return;
    try {
     const cloudDeps = await loadDeploymentsFromDb();
     const cloudUsers = await loadUsersFromDb();
     if (isSaving.current) return;
+    // Double-check no save happened while we were fetching
+    if (Date.now() - lastSaveTime.current < 30000) return;
     if (cloudDeps && cloudDeps.length > 0) {
      setDeployments(cloudDeps);
      await sSet("tac:deployments", cloudDeps, true);
@@ -627,7 +631,7 @@ function AppInner() {
      await sSet("tac:users", cloudUsers, true);
     }
    } catch(e) { /* silent — retry next cycle */ }
-  }, 15000);
+  }, 30000);
   return () => { clearInterval(localInterval); clearInterval(cloudInterval); };
  }, [dataLoaded]);
  async function saveUsers(u) {
