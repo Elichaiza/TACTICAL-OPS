@@ -632,6 +632,7 @@ function AppInner() {
  }, [dataLoaded]);
  async function saveUsers(u) {
   isSaving.current = true;
+  lastSaveTime.current = Date.now();
   setUsers(u);
   await sSet("tac:users", u, true);
   syncUsersToDb(u).catch(()=>{});
