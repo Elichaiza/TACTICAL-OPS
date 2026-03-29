@@ -133,7 +133,7 @@ function getAttField(val, field, def="") {
  if (!val || typeof val === "string") return def;
  return (val[field] !== undefined && val[field] !== null) ? val[field] : def; }
 function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {}, fullAtt = {}, pinnedAssignments = {}) {
- const MIN_REST  = 450;
+ const MIN_REST  = 480; // 8 שעות מנוחה בין משימות
  const MAX_DAILY = 480;
  const present = soldiers.filter(s => getAttStatus(attendanceToday[s.id]) === 'present');
  if (!present.length)
