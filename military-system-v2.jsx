@@ -570,16 +570,51 @@ function AppInner() {
  const notify = (msg, type="success") => {
   setNotification({ msg, type });
   setTimeout(() => setNotification(null), 3500); };
+ /* ── Load from Supabase with delayed retry ── */
+ const cloudLoaded = useRef(false);
+ async function pullFromCloud() {
+  try {
+   const cloudDeps = await loadDeploymentsFromDb();
+   const cloudUsers = await loadUsersFromDb();
+   if (cloudDeps && cloudDeps.length > 0) {
+    setDeployments(cloudDeps);
+    await sSet("tac:deployments", cloudDeps, true);
+    cloudLoaded.current = true;
+   }
+   if (cloudUsers && cloudUsers.length > 0) {
+    setUsers(cloudUsers);
+    await sSet("tac:users", cloudUsers, true);
+   }
+   return !!(cloudDeps && cloudDeps.length > 0);
+  } catch(e) { return false; }
+ }
  useEffect(() => {
   (async () => {
-   // Try loading from Supabase first, fall back to localStorage
-   let storedUsers = await loadUsersFromDb().catch(()=>null);
-   let storedDeps = await loadDeploymentsFromDb().catch(()=>null);
-   if (!storedUsers) storedUsers = await sGet("tac:users", true);
-   if (!storedDeps) storedDeps = await sGet("tac:deployments", true);
+   // 1. Load from localStorage immediately (fast, always available)
+   let storedUsers = await sGet("tac:users", true);
+   let storedDeps = await sGet("tac:deployments", true);
    const session = await sGet("tac:session", false);
+   if (storedUsers) setUsers(storedUsers);
+   if (storedDeps) setDeployments(storedDeps);
+   // 2. Try Supabase (may fail on first load)
+   const ok = await pullFromCloud();
+   if (!ok && storedDeps) {
+    // Supabase failed — schedule retries
+    const retryDelays = [3000, 6000, 12000];
+    for (const delay of retryDelays) {
+     await new Promise(r => setTimeout(r, delay));
+     if (cloudLoaded.current) break;
+     const ok2 = await pullFromCloud();
+     if (ok2) break;
+    }
+   }
+   // Re-read after potential cloud update
+   if (cloudLoaded.current) {
+    storedUsers = await sGet("tac:users", true);
+    storedDeps = await sGet("tac:deployments", true);
+   }
    if (storedUsers) { setUsers(storedUsers); await sSet("tac:users", storedUsers, true); }
-   if (storedDeps) { setDeployments(storedDeps); await sSet("tac:deployments", storedDeps, true); }
+   if (storedDeps)  { setDeployments(storedDeps); await sSet("tac:deployments", storedDeps, true); }
    const urlParams = new URLSearchParams(window.location.search);
    const inviteToken = urlParams.get("invite");
    if (inviteToken) {
