@@ -638,6 +638,7 @@ function AppInner() {
   isSaving.current = false; }
  async function saveDeps(d) {
   isSaving.current = true;
+  lastSaveTime.current = Date.now();
   setDeployments(d);
   await sSet("tac:deployments", d, true);
   syncDeploymentsToDb(d).catch(()=>{});
