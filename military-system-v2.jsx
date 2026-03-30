@@ -249,19 +249,8 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
     if (slot.startAbs < availFromAbs || slot.endAbs > availToAbs) return false; } }
   if (!slotRoleOk(soldier, slot)) return false;
   return true; }
- function lv1(soldier, slot) {
-  if (!hardOk(soldier, slot)) return false;
-  const st = state[soldier.id];
-  for (const b of st.busySlots) {
-   const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
-   if (gap >= 0 && gap < MIN_REST) return false;
-  }
-  const ws = slot.endAbs - 1440;
-  const worked = st.busySlots.reduce(
-   (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, ws)), 0);
-  if (worked + slot.dur > MAX_DAILY) return false;
-  return true; }
- function lv2(soldier, slot) {
+ /* ── 3b. בדיקת חוקיות אחידה — canAssign ──────────────────── */
+ function canAssign(soldier, slot) {
   if (!hardOk(soldier, slot)) return false;
   const st = state[soldier.id];
   /* מנוחה 8 שעות — חוק קשיח */
@@ -269,26 +258,42 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
    if (gap >= 0 && gap < MIN_REST) return false;
   }
+  /* מקסימום 8 שעות ב-24 שעות — חוק קשיח */
   const ws = slot.endAbs - 1440;
   const worked = st.busySlots.reduce(
    (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, ws)), 0);
   if (worked + slot.dur > MAX_DAILY) return false;
   return true; }
- function lv3(soldier, slot) {
-  if (!hardOk(soldier, slot)) return false;
+ /* ── 3c. פעולות שיבוץ/הסרה ─────────────────────────────── */
+ function doAssign(soldier, slot, reason) {
   const st = state[soldier.id];
-  /* מנוחה 8 שעות — חוק קשיח */
-  for (const b of st.busySlots) {
+  slot.assigned.push({ id: soldier.id, name: soldier.name, role: soldier.role, reason });
+  slot.assignedIds.add(soldier.id);
+  st.totalMins += slot.dur;
+  st.shiftCount += 1;
+  st.lastEndAbs = Math.max(st.lastEndAbs, slot.endAbs);
+  st.busySlots.push({ s: slot.startAbs, e: slot.endAbs });
+  st.missionCounts[slot.missionId] = (st.missionCounts[slot.missionId] || 0) + 1; }
+ function undoAssign(soldierId, slot) {
+  const st = state[soldierId];
+  const idx = slot.assigned.findIndex(a => a.id === soldierId);
+  if (idx >= 0) slot.assigned.splice(idx, 1);
+  slot.assignedIds.delete(soldierId);
+  st.totalMins -= slot.dur;
+  st.shiftCount -= 1;
+  st.busySlots = st.busySlots.filter(b => !(b.s === slot.startAbs && b.e === slot.endAbs));
+  st.missionCounts[slot.missionId] = Math.max(0, (st.missionCounts[slot.missionId] || 1) - 1); }
+ /* ── 3d. חישוב מנוחה של חייל ביחס לסלוט ─────────────────── */
+ function getRestMins(soldierId, slot) {
+  const bs = state[soldierId].busySlots;
+  if (!bs.length) return 99999;
+  let minGap = 99999;
+  for (const b of bs) {
    const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
-   if (gap >= 0 && gap < MIN_REST) return false;
+   if (gap >= 0 && gap < minGap) minGap = gap;
   }
-  /* 8 שעות מקסימום ליום — חוק קשיח */
-  const ws = slot.endAbs - 1440;
-  const worked = st.busySlots.reduce(
-   (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, ws)), 0);
-  if (worked + slot.dur > MAX_DAILY) return false;
-  return true; }
- /* ── 4. דירוג חיילים — totalMins ראשון, גיוון משימות כ-tiebreaker ── */
+  return minGap; }
+ /* ── 4. דירוג חיילים — שעות → מנוחה → גיוון → round-robin ── */
  const missionSeed = {};
  missions.forEach((m, i) => { missionSeed[m.id] = i; });
  const n = present.length || 1;
@@ -296,232 +301,246 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   const seed = missionSeed[slot.missionId] || 0;
   return pool.slice().sort((a, b) => {
    const A = state[a.id], B = state[b.id];
-   if (A.totalMins  !== B.totalMins)  return A.totalMins  - B.totalMins;
+   /* ① הכי מעט שעות סה"כ — שוויון */
+   if (A.totalMins !== B.totalMins) return A.totalMins - B.totalMins;
+   /* ② הכי הרבה מנוחה — מי שנח יותר עולה קודם */
+   const restA = getRestMins(a.id, slot), restB = getRestMins(b.id, slot);
+   if (restA !== restB) return restB - restA;
+   /* ③ הכי מעט פעמים במשימה הזו — גיוון */
    const mA = A.missionCounts[slot.missionId] || 0;
    const mB = B.missionCounts[slot.missionId] || 0;
    if (mA !== mB) return mA - mB;
+   /* ④ הכי מעט משמרות סה"כ */
    if (A.shiftCount !== B.shiftCount) return A.shiftCount - B.shiftCount;
-   const rA = A.busySlots.length === 0 ? 999999 : Math.min(...A.busySlots.map(b => b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e).filter(g => g >= 0).concat([999999]));
-   const rB = B.busySlots.length === 0 ? 999999 : Math.min(...B.busySlots.map(b => b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e).filter(g => g >= 0).concat([999999]));
-   if (rA !== rB) return rB - rA;
+   /* ⑤ round-robin למניעת עדיפות קבועה */
    return ((A.idx + seed) % n) - ((B.idx + seed) % n);
   }); }
+ function buildReason(soldier, slot, suffix) {
+  const st = state[soldier.id];
+  const rest = getRestMins(soldier.id, slot);
+  const parts = [`שעות: ${fmtMins(st.totalMins)}`, `מנוחה: ${fmtMins(rest)}`];
+  if (slot.minSpecialRoles > 0 || slot.mandatoryRoles.length > 0) parts.push(`תפקיד: ${soldier.role}`);
+  if (slot.requiredCerts.length > 0)
+   parts.push(`הסמכה: ${slot.requiredCerts.map(c => CERT_LABELS[c]).join(', ')}`);
+  parts.push(`שיבוץ #${st.shiftCount + 1}`);
+  if (suffix) parts.push(suffix);
+  return parts.join(' · '); }
  const numMissions = missions.length || 1;
+ /* ── שלב א': סלוטים מיוחדים (תפקיד/הסמכה נדרשת) — קודם כל ── */
+ const specialSlots = allSlots
+  .filter(sl => sl.hardness > 0 && sl.assigned.length < sl.needed)
+  .sort((a, b) => b.hardness - a.hardness || a.startAbs - b.startAbs);
+ for (const slot of specialSlots) {
+  while (slot.assigned.length < slot.needed) {
+   const pool = present.filter(s => canAssign(s, slot));
+   if (!pool.length) break;
+   const pick = rank(pool, slot)[0];
+   doAssign(pick, slot, buildReason(pick, slot, null));
+  } }
+ /* ── שלב ב': סלוטים רגילים — Greedy גלובלי (כל הימים ביחד) ── */
  let round = 0;
- const dayGroups = {};
- allSlots.forEach(sl => {
-  const d = sl.dayNum || 1;
-  (dayGroups[d] = dayGroups[d] || []).push(sl);
- });
- const sortedDays = Object.keys(dayGroups).map(Number).sort((a, b) => a - b);
- for (const day of sortedDays) {
-  /* busySlots לא מאופסים — כדי לשמור על 8 שעות מנוחה בין ימים */
-  const daySlots = dayGroups[day];
-  let progress = true;
-  while (progress) {
-   progress = false;
-   const open = daySlots.filter(sl => sl.assigned.length < sl.needed);
-   if (!open.length) break;
-   open.forEach(sl => {
-    sl._lv1 = present.filter(s => lv1(s, sl)).length;
-    sl._lv2 = present.filter(s => lv2(s, sl)).length;
-    sl._lv3 = present.filter(s => lv3(s, sl)).length;
-    sl._score = sl._lv1 > 0 ? sl._lv1
-         : sl._lv2 > 0 ? 10000 + sl._lv2
-         : sl._lv3 > 0 ? 20000 + sl._lv3
-         : 99999;
-   });
-   const viable = open.filter(sl => sl._lv3 > 0);
-   if (!viable.length) break;
-   const missionProgress = {};
-   allSlots.forEach(sl => {
-    missionProgress[sl.missionId] = (missionProgress[sl.missionId]||0) + sl.assigned.length;
-   });
-   viable.sort((a, b) => {
-    /* ① משימות שדורשות תפקידים/הסמכות קודם */
-    if (a.hardness !== b.hardness) return b.hardness - a.hardness;
-    /* ② הכי מצומצם (הכי מעט מועמדים) */
-    if (a._score !== b._score) return a._score - b._score;
-    /* ③ קיבולת שנותרה גדולה יותר */
-    const capA = a.dur * (a.needed - a.assigned.length);
-    const capB = b.dur * (b.needed - b.assigned.length);
-    if (capA !== capB) return capB - capA;
-    /* ④ משימות פחות מלאות */
-    const pa = missionProgress[a.missionId] || 0;
-    const pb = missionProgress[b.missionId] || 0;
-    if (pa !== pb) return pa - pb;
-    /* ⑤ משמרות מוקדמות */
-    if (a.startAbs !== b.startAbs) return a.startAbs - b.startAbs;
-    /* ⑥ round-robin */
-    return ((a.missionIdx - round) % numMissions + numMissions) % numMissions
-      - ((b.missionIdx - round) % numMissions + numMissions) % numMissions;
-   });
-   const slot = viable[0];
-   let pool;
-   if      (slot._lv1 > 0) pool = present.filter(s => lv1(s, slot));
-   else if (slot._lv2 > 0) pool = present.filter(s => lv2(s, slot));
-   else                    pool = present.filter(s => lv3(s, slot));
-   const ranked = rank(pool, slot);
-   /* forward-check: שמור חיילים בעלי תפקיד למשימות שדורשות תפקיד */
-   let pick;
-   if (slot.hardness === 0) {
+ let greedyProgress = true;
+ while (greedyProgress) {
+  greedyProgress = false;
+  const open = allSlots.filter(sl => sl.assigned.length < sl.needed);
+  if (!open.length) break;
+  /* חשב מועמדים לכל סלוט */
+  open.forEach(sl => {
+   sl._cands = present.filter(s => canAssign(s, sl)).length;
+  });
+  /* דלג על סלוטים ללא מועמדים — לא עוצרים! ממשיכים לאחרים */
+  const viable = open.filter(sl => sl._cands > 0);
+  if (!viable.length) break;
+  /* מיון: הכי מצומצם קודם, אח"כ לפי זמן ו-round-robin */
+  const missionProgress = {};
+  allSlots.forEach(sl => {
+   missionProgress[sl.missionId] = (missionProgress[sl.missionId]||0) + sl.assigned.length;
+  });
+  viable.sort((a, b) => {
+   /* ① הכי מעט מועמדים — הכי מצומצם קודם */
+   if (a._cands !== b._cands) return a._cands - b._cands;
+   /* ② משימות פחות מלאות */
+   const fillA = (missionProgress[a.missionId]||0) / Math.max(1, allSlots.filter(s=>s.missionId===a.missionId).reduce((sum,s)=>sum+s.needed,0));
+   const fillB = (missionProgress[b.missionId]||0) / Math.max(1, allSlots.filter(s=>s.missionId===b.missionId).reduce((sum,s)=>sum+s.needed,0));
+   if (Math.abs(fillA - fillB) > 0.01) return fillA - fillB;
+   /* ③ משמרות מוקדמות */
+   if (a.startAbs !== b.startAbs) return a.startAbs - b.startAbs;
+   /* ④ round-robin בין משימות */
+   return ((a.missionIdx - round) % numMissions + numMissions) % numMissions
+     - ((b.missionIdx - round) % numMissions + numMissions) % numMissions;
+  });
+  const slot = viable[0];
+  const pool = present.filter(s => canAssign(s, slot));
+  const ranked = rank(pool, slot);
+  /* forward-check: שמור בעלי תפקיד למשימות שדורשות תפקיד */
+  let pick;
+  if (slot.hardness === 0) {
+   /* בדוק אם יש סלוטים מיוחדים עתידיים שצריכים את החייל */
+   const futureSpecial = allSlots.filter(fs =>
+    fs.hardness > 0 && fs.assigned.length < fs.needed);
+   if (futureSpecial.length > 0) {
     pick = ranked.find(s => !SPECIAL_ROLES.includes(s.role)) || ranked[0];
    } else {
     pick = ranked[0];
    }
-   const st     = state[pick.id];
-   const restMins = st.busySlots.length === 0 ? 99999 : Math.min(...st.busySlots.map(b => b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e).filter(g => g >= 0).concat([99999]));
-   const parts = [`שעות: ${fmtMins(st.totalMins)}`, `מנוחה: ${fmtMins(restMins)}`];
-   if (slot.minSpecialRoles > 0 || slot.mandatoryRoles.length > 0) parts.push(`תפקיד: ${pick.role}`);
-   if (slot.requiredCerts.length > 0)
-    parts.push(`הסמכה: ${slot.requiredCerts.map(c => CERT_LABELS[c]).join(', ')}`);
-   parts.push(`שיבוץ #${st.shiftCount + 1}`);
-   if (slot._lv1 === 0 && slot._lv2 > 0) parts.push('⚠ מנוחה קצרה');
-   if (slot._lv1 === 0 && slot._lv2 === 0) parts.push('⚠ עומס גבוה');
-   slot.assigned.push({ id:pick.id, name:pick.name, role:pick.role, reason:parts.join(' · ') });
-   slot.assignedIds.add(pick.id);
-   st.totalMins  += slot.dur;
-   st.shiftCount += 1;
-   st.lastEndAbs  = slot.endAbs;
-   st.busySlots.push({ s:slot.startAbs, e:slot.endAbs });
-   st.missionCounts[slot.missionId] = (st.missionCounts[slot.missionId] || 0) + 1;
-   round++;
-   progress = true; } }
- /* ── rebuild busySlots from all days for post-processing ──── */
- present.forEach(s => { state[s.id].busySlots = []; });
- allSlots.forEach(sl => {
-  sl.assigned.forEach(a => {
-   if (state[a.id]) state[a.id].busySlots.push({ s: sl.startAbs, e: sl.endAbs });
-  });
- });
- /* ── 5a. Redistribution — מלא slots ריקים ע"י החלפות ────── */
- for (let rIter = 0; rIter < 100; rIter++) {
+  } else {
+   pick = ranked[0];
+  }
+  doAssign(pick, slot, buildReason(pick, slot, null));
+  round++;
+  greedyProgress = true; }
+ /* ── שלב ג': Redistribution — מלא סלוטים ריקים ע"י החלפות ── */
+ for (let rIter = 0; rIter < 200; rIter++) {
   const unfilled = allSlots.filter(sl => sl.assigned.length < sl.needed);
   if (!unfilled.length) break;
   unfilled.sort((a, b) => {
    const ra = a.needed - a.assigned.length, rb = b.needed - b.assigned.length;
-   return rb - ra || b.dur - a.dur;
+   return rb - ra || b.hardness - a.hardness || b.dur - a.dur;
   });
   let filled = false;
   for (const uSlot of unfilled) {
-   // try direct fill first: any present soldier that passes lv3
-   const directPool = present.filter(s => lv3(s, uSlot));
+   /* ניסיון 1: מילוי ישיר */
+   const directPool = present.filter(s => canAssign(s, uSlot));
    if (directPool.length) {
-    const ranked2 = rank(directPool, uSlot);
-    const pick2 = ranked2[0]; const st2 = state[pick2.id];
-    uSlot.assigned.push({ id:pick2.id, name:pick2.name, role:pick2.role,
-     reason:`שעות: ${fmtMins(st2.totalMins)} · שיבוץ #${st2.shiftCount+1} (refill)` });
-    uSlot.assignedIds.add(pick2.id);
-    st2.totalMins += uSlot.dur; st2.shiftCount += 1;
-    st2.busySlots.push({ s:uSlot.startAbs, e:uSlot.endAbs });
-    st2.missionCounts[uSlot.missionId] = (st2.missionCounts[uSlot.missionId]||0)+1;
+    const pick2 = rank(directPool, uSlot)[0];
+    doAssign(pick2, uSlot, buildReason(pick2, uSlot, '(refill)'));
     filled = true; break;
    }
-   // 2-swap: find soldier S who could fill uSlot if freed from a filled slot
+   /* ניסיון 2: 2-swap — שחרר חייל ממשימה אחרת */
    for (const candidate of present) {
     if (uSlot.assignedIds.has(candidate.id)) continue;
-    const cBusy = state[candidate.id].busySlots
-     .some(b => b.s < uSlot.endAbs && uSlot.startAbs < b.e);
-    if (!cBusy) continue; // not blocked by time — should have been caught by direct fill
     const cCerts = uSlot.requiredCerts.length === 0 ||
      uSlot.requiredCerts.every(c => candidate.certifications?.includes(c));
     if (!cCerts) continue;
-    // find which of candidate's current slots is blocking
-    const blockingSlot = allSlots.find(sl =>
+    /* מצא סלוט שחוסם את candidate */
+    const blockingSlots = allSlots.filter(sl =>
      sl.assignedIds.has(candidate.id) &&
-     sl.startAbs < uSlot.endAbs && uSlot.startAbs < sl.endAbs);
-    if (!blockingSlot) continue;
-    const cEntry = blockingSlot.assigned.find(a => a.id === candidate.id);
-    if (cEntry?.pinned) continue;
-    // find a replacement for candidate in blockingSlot
-    const replacements = present.filter(r => {
-     if (r.id === candidate.id) return false;
-     if (blockingSlot.assignedIds.has(r.id)) return false;
-     if (uSlot.assignedIds.has(r.id)) return false;
-     if (state[r.id].busySlots.some(b => b.s < blockingSlot.endAbs && blockingSlot.startAbs < b.e)) return false;
-     const rCerts = blockingSlot.requiredCerts.length === 0 ||
-      blockingSlot.requiredCerts.every(c => r.certifications?.includes(c));
-     if (!rCerts) return false;
-     /* בדיקת מנוחה 8 שעות ל-replacement */
-     const rRestBad = state[r.id].busySlots.some(b => {
-      const gap = b.s >= blockingSlot.endAbs ? b.s - blockingSlot.endAbs : blockingSlot.startAbs - b.e;
-      return gap >= 0 && gap < MIN_REST;
+     !sl.assigned.find(a => a.id === candidate.id)?.pinned);
+    for (const blockingSlot of blockingSlots) {
+     const cEntry = blockingSlot.assigned.find(a => a.id === candidate.id);
+     if (cEntry?.pinned) continue;
+     /* מצא מחליף ל-blockingSlot */
+     const replacements = present.filter(r => {
+      if (r.id === candidate.id) return false;
+      if (blockingSlot.assignedIds.has(r.id)) return false;
+      if (uSlot.assignedIds.has(r.id)) return false;
+      /* בדוק שה-replacement יכול להיכנס ל-blockingSlot */
+      const rBusy = state[r.id].busySlots.some(b => b.s < blockingSlot.endAbs && blockingSlot.startAbs < b.e);
+      if (rBusy) return false;
+      const rCerts = blockingSlot.requiredCerts.length === 0 ||
+       blockingSlot.requiredCerts.every(c => r.certifications?.includes(c));
+      if (!rCerts) return false;
+      /* בדיקת מנוחה */
+      const rRestBad = state[r.id].busySlots.some(b => {
+       const gap = b.s >= blockingSlot.endAbs ? b.s - blockingSlot.endAbs : blockingSlot.startAbs - b.e;
+       return gap >= 0 && gap < MIN_REST;
+      });
+      if (rRestBad) return false;
+      /* בדיקת מקסימום יומי */
+      const wsR = blockingSlot.endAbs - 1440;
+      const workedR = state[r.id].busySlots.reduce(
+       (sum, b) => sum + Math.max(0, Math.min(b.e, blockingSlot.endAbs) - Math.max(b.s, wsR)), 0);
+      if (workedR + blockingSlot.dur > MAX_DAILY) return false;
+      /* בדיקת תפקיד */
+      blockingSlot.assignedIds.delete(candidate.id);
+      const idx3 = blockingSlot.assigned.indexOf(cEntry);
+      blockingSlot.assigned.splice(idx3, 1);
+      const rok = slotRoleOk(r, blockingSlot);
+      blockingSlot.assigned.splice(idx3, 0, cEntry);
+      blockingSlot.assignedIds.add(candidate.id);
+      return rok;
      });
-     if (rRestBad) return false;
-     /* בדיקת 8 שעות מקסימום ליום ל-replacement */
-     const wsR = blockingSlot.endAbs - 1440;
-     const workedR = state[r.id].busySlots.reduce(
-      (sum, b) => sum + Math.max(0, Math.min(b.e, blockingSlot.endAbs) - Math.max(b.s, wsR)), 0);
-     if (workedR + blockingSlot.dur > MAX_DAILY) return false;
-     // temporarily remove candidate to test role
-     blockingSlot.assignedIds.delete(candidate.id);
-     const idx3 = blockingSlot.assigned.indexOf(cEntry);
-     blockingSlot.assigned.splice(idx3, 1);
-     const rok = slotRoleOk(r, blockingSlot);
-     blockingSlot.assigned.splice(idx3, 0, cEntry);
-     blockingSlot.assignedIds.add(candidate.id);
-     return rok;
-    });
-    if (!replacements.length) continue;
-    const rep = rank(replacements, blockingSlot)[0];
-    // also verify candidate can actually enter uSlot after being freed
-    const canEnter = uSlot.requiredCerts.length === 0 ||
-     uSlot.requiredCerts.every(c => candidate.certifications?.includes(c));
-    // temporarily remove candidate from blockingSlot
-    blockingSlot.assignedIds.delete(candidate.id);
-    const cIdx = blockingSlot.assigned.indexOf(cEntry);
-    blockingSlot.assigned.splice(cIdx, 1);
-    const cOldBusy = state[candidate.id].busySlots;
-    state[candidate.id].busySlots = cOldBusy.filter(b => !(b.s === blockingSlot.startAbs && b.e === blockingSlot.endAbs));
-    /* בדיקות ל-candidate ב-uSlot: חפיפה, מנוחה, מקסימום יומי, תפקיד */
-    const cNewBusy = state[candidate.id].busySlots;
-    const cOverlap = cNewBusy.some(b => b.s < uSlot.endAbs && uSlot.startAbs < b.e);
-    const cRestBad = cNewBusy.some(b => {
-     const gap = b.s >= uSlot.endAbs ? b.s - uSlot.endAbs : uSlot.startAbs - b.e;
-     return gap >= 0 && gap < MIN_REST;
-    });
-    const wsC = uSlot.endAbs - 1440;
-    const workedC = cNewBusy.reduce(
-     (sum, b) => sum + Math.max(0, Math.min(b.e, uSlot.endAbs) - Math.max(b.s, wsC)), 0);
-    const cMaxOk = (workedC + uSlot.dur) <= MAX_DAILY;
-    const canDoU = canEnter && !cOverlap && !cRestBad && cMaxOk
-     && slotRoleOk(candidate, uSlot);
-    if (canDoU) {
-     // execute 2-swap: remove candidate from blocking, add rep to blocking, add candidate to uSlot
-     const stC = state[candidate.id], stR = state[rep.id];
-     stC.totalMins -= blockingSlot.dur; stC.shiftCount -= 1;
-     stC.missionCounts[blockingSlot.missionId] = Math.max(0,(stC.missionCounts[blockingSlot.missionId]||1)-1);
-     blockingSlot.assigned.push({ id:rep.id, name:rep.name, role:rep.role,
-      reason:`שעות: ${fmtMins(stR.totalMins)} · שיבוץ #${stR.shiftCount+1} (swap2)` });
-     blockingSlot.assignedIds.add(rep.id);
-     stR.totalMins += blockingSlot.dur; stR.shiftCount += 1;
-     stR.busySlots.push({ s:blockingSlot.startAbs, e:blockingSlot.endAbs });
-     stR.missionCounts[blockingSlot.missionId] = (stR.missionCounts[blockingSlot.missionId]||0)+1;
-     uSlot.assigned.push({ id:candidate.id, name:candidate.name, role:candidate.role,
-      reason:`שעות: ${fmtMins(stC.totalMins)} · שיבוץ #${stC.shiftCount+1} (swap2)` });
-     uSlot.assignedIds.add(candidate.id);
-     stC.totalMins += uSlot.dur; stC.shiftCount += 1;
-     stC.busySlots.push({ s:uSlot.startAbs, e:uSlot.endAbs });
-     stC.missionCounts[uSlot.missionId] = (stC.missionCounts[uSlot.missionId]||0)+1;
-     filled = true; break;
-    } else {
-     // restore
-     blockingSlot.assigned.splice(cIdx, 0, cEntry);
-     blockingSlot.assignedIds.add(candidate.id);
-     state[candidate.id].busySlots = cOldBusy;
+     if (!replacements.length) continue;
+     const rep = rank(replacements, blockingSlot)[0];
+     /* הסר candidate מ-blockingSlot ובדוק אם יכול להיכנס ל-uSlot */
+     undoAssign(candidate.id, blockingSlot);
+     if (canAssign(candidate, uSlot) && slotRoleOk(candidate, uSlot)) {
+      /* בצע את ה-swap */
+      doAssign(rep, blockingSlot, buildReason(rep, blockingSlot, '(swap)'));
+      doAssign(candidate, uSlot, buildReason(candidate, uSlot, '(swap)'));
+      filled = true; break;
+     } else {
+      /* שחזר */
+      doAssign(candidate, blockingSlot, cEntry.reason);
+     }
     }
+    if (filled) break;
+   }
+   if (filled) break;
+   /* ניסיון 3: 3-swap chain — שרשרת של 3 החלפות */
+   for (const c1 of present) {
+    if (uSlot.assignedIds.has(c1.id)) continue;
+    const c1Certs = uSlot.requiredCerts.length === 0 ||
+     uSlot.requiredCerts.every(c => c1.certifications?.includes(c));
+    if (!c1Certs) continue;
+    /* מצא סלוט שחוסם c1 */
+    const block1 = allSlots.find(sl =>
+     sl.assignedIds.has(c1.id) &&
+     !sl.assigned.find(a => a.id === c1.id)?.pinned);
+    if (!block1) continue;
+    const c1Entry = block1.assigned.find(a => a.id === c1.id);
+    if (c1Entry?.pinned) continue;
+    /* מצא c2 שיכול להחליף את c1 ב-block1 */
+    for (const c2 of present) {
+     if (c2.id === c1.id) continue;
+     if (block1.assignedIds.has(c2.id)) continue;
+     const c2Busy = state[c2.id].busySlots.some(b => b.s < block1.endAbs && block1.startAbs < b.e);
+     if (c2Busy) continue;
+     /* מצא סלוט שחוסם c2 */
+     const block2 = allSlots.find(sl =>
+      sl.assignedIds.has(c2.id) &&
+      !sl.assigned.find(a => a.id === c2.id)?.pinned &&
+      sl !== block1);
+     if (!block2) continue;
+     const c2Entry = block2.assigned.find(a => a.id === c2.id);
+     if (c2Entry?.pinned) continue;
+     /* מצא c3 שיכול להחליף את c2 ב-block2 */
+     const c3Pool = present.filter(r => {
+      if (r.id === c1.id || r.id === c2.id) return false;
+      if (block2.assignedIds.has(r.id)) return false;
+      if (state[r.id].busySlots.some(b => b.s < block2.endAbs && block2.startAbs < b.e)) return false;
+      const rRest = state[r.id].busySlots.some(b => {
+       const gap = b.s >= block2.endAbs ? b.s - block2.endAbs : block2.startAbs - b.e;
+       return gap >= 0 && gap < MIN_REST;
+      });
+      if (rRest) return false;
+      const wsR = block2.endAbs - 1440;
+      const workedR = state[r.id].busySlots.reduce(
+       (sum, b) => sum + Math.max(0, Math.min(b.e, block2.endAbs) - Math.max(b.s, wsR)), 0);
+      if (workedR + block2.dur > MAX_DAILY) return false;
+      return true;
+     });
+     if (!c3Pool.length) continue;
+     const c3 = rank(c3Pool, block2)[0];
+     /* נסה לבצע: c3→block2, c2→block1, c1→uSlot */
+     const c1Reason = c1Entry.reason, c2Reason = c2Entry.reason;
+     undoAssign(c1.id, block1);
+     undoAssign(c2.id, block2);
+     /* בדוק ש-c2 יכול להיכנס ל-block1 ו-c1 יכול להיכנס ל-uSlot */
+     const c2CanBlock1 = canAssign(c2, block1);
+     const c1CanU = canAssign(c1, uSlot);
+     if (c2CanBlock1 && c1CanU) {
+      doAssign(c3, block2, buildReason(c3, block2, '(swap3)'));
+      doAssign(c2, block1, buildReason(c2, block1, '(swap3)'));
+      doAssign(c1, uSlot, buildReason(c1, uSlot, '(swap3)'));
+      filled = true; break;
+     } else {
+      /* שחזר */
+      doAssign(c2, block2, c2Reason);
+      doAssign(c1, block1, c1Reason);
+     }
+    }
+    if (filled) break;
    }
    if (filled) break;
   }
   if (!filled) break;
  }
- /* ── 5b. Equalization swap pass — שיפור שוויון שעות ──────── */
- const slotDurMin = allSlots.reduce((min, sl) => Math.min(min, sl.dur), Infinity);
- for (let iter = 0; iter < 200; iter++) {
+ /* ── שלב ד': Equalization — איזון שעות בין חיילים ────────── */
+ for (let iter = 0; iter < 300; iter++) {
   const ids = present.map(s => s.id);
   const totalAll = ids.reduce((sum, id) => sum + state[id].totalMins, 0);
   const avg = totalAll / ids.length;
-  /* סדר חיילים מהכבד לקל */
   const sortedHeavy = ids.slice().sort((a, b) => state[b].totalMins - state[a].totalMins);
   let swapped = false;
   for (const heavyId of sortedHeavy) {
@@ -529,54 +548,25 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    const lightCandidates = ids.filter(id => state[id].totalMins < avg)
     .sort((a, b) => state[a].totalMins - state[b].totalMins);
    for (const lightId of lightCandidates) {
-    if (state[heavyId].totalMins - state[lightId].totalMins <= slotDurMin) continue;
+    const diff = state[heavyId].totalMins - state[lightId].totalMins;
+    if (diff <= 0) continue;
     for (const slot of allSlots) {
      if (!slot.assignedIds.has(heavyId)) continue;
      if (slot.assignedIds.has(lightId)) continue;
+     /* החלפה שווה רק אם היא מקטינה פער */
+     if (slot.dur > diff) continue;
      const heavyEntry = slot.assigned.find(a => a.id === heavyId);
      if (heavyEntry?.pinned) continue;
      const lightSoldier = present.find(s => s.id === lightId);
-     slot.assignedIds.delete(heavyId);
-     const hIdx = slot.assigned.indexOf(heavyEntry);
-     slot.assigned.splice(hIdx, 1);
-     const lightBusy = state[lightId].busySlots
-      .some(b => b.s < slot.endAbs && slot.startAbs < b.e);
-     const certsOk = slot.requiredCerts.length === 0 ||
-      slot.requiredCerts.every(c => lightSoldier.certifications?.includes(c));
-     const roleOk = slotRoleOk(lightSoldier, slot);
-     /* בדיקת מנוחה 8 שעות לחייל הקל */
-     const lightRestOk = !state[lightId].busySlots.some(b => {
-      const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
-      return gap >= 0 && gap < MIN_REST;
-     });
-     /* בדיקת 8 שעות מקסימום ליום לחייל הקל */
-     const wsL = slot.endAbs - 1440;
-     const workedL = state[lightId].busySlots.reduce(
-      (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, wsL)), 0);
-     const lightMaxOk = (workedL + slot.dur) <= MAX_DAILY;
-     /* בדיקת מנוחה לחייל הכבד אחרי ההסרה */
-     const heavyBusyAfter = state[heavyId].busySlots.filter(b => !(b.s === slot.startAbs && b.e === slot.endAbs));
-     const heavyRestOk = !heavyBusyAfter.some((b1, i1) =>
-      heavyBusyAfter.some((b2, i2) => {
-       if (i1 === i2) return false;
-       const gap = b2.s >= b1.e ? b2.s - b1.e : b1.s - b2.e;
-       return gap >= 0 && gap < MIN_REST;
-      }));
-     if (!lightBusy && certsOk && roleOk && lightRestOk && lightMaxOk && heavyRestOk) {
-      const st1 = state[heavyId], st2 = state[lightId];
-      slot.assigned.push({ id: lightId, name: lightSoldier.name, role: lightSoldier.role,
-       reason: `שעות: ${fmtMins(st2.totalMins + slot.dur)} · שיבוץ #${st2.shiftCount + 1} (eq)` });
-      slot.assignedIds.add(lightId);
-      st1.totalMins -= slot.dur; st1.shiftCount -= 1;
-      st1.busySlots = st1.busySlots.filter(b => !(b.s === slot.startAbs && b.e === slot.endAbs));
-      st2.totalMins += slot.dur; st2.shiftCount += 1;
-      st2.busySlots.push({ s: slot.startAbs, e: slot.endAbs });
-      st1.missionCounts[slot.missionId] = Math.max(0, (st1.missionCounts[slot.missionId] || 1) - 1);
-      st2.missionCounts[slot.missionId] = (st2.missionCounts[slot.missionId] || 0) + 1;
+     /* הסר את הכבד ובדוק אם הקל יכול להיכנס */
+     const heavyReason = heavyEntry.reason;
+     undoAssign(heavyId, slot);
+     if (canAssign(lightSoldier, slot) && slotRoleOk(lightSoldier, slot)) {
+      doAssign(lightSoldier, slot, buildReason(lightSoldier, slot, '(eq)'));
       swapped = true; break;
      } else {
-      slot.assigned.splice(hIdx, 0, heavyEntry);
-      slot.assignedIds.add(heavyId);
+      /* שחזר */
+      doAssign({ id: heavyId, name: heavyEntry.name, role: heavyEntry.role }, slot, heavyReason);
      }
     }
     if (swapped) break;
