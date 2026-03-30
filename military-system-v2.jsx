@@ -473,7 +473,18 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
     blockingSlot.assigned.splice(cIdx, 1);
     const cOldBusy = state[candidate.id].busySlots;
     state[candidate.id].busySlots = cOldBusy.filter(b => !(b.s === blockingSlot.startAbs && b.e === blockingSlot.endAbs));
-    const canDoU = canEnter && !state[candidate.id].busySlots.some(b => b.s < uSlot.endAbs && uSlot.startAbs < b.e)
+    /* בדיקות ל-candidate ב-uSlot: חפיפה, מנוחה, מקסימום יומי, תפקיד */
+    const cNewBusy = state[candidate.id].busySlots;
+    const cOverlap = cNewBusy.some(b => b.s < uSlot.endAbs && uSlot.startAbs < b.e);
+    const cRestBad = cNewBusy.some(b => {
+     const gap = b.s >= uSlot.endAbs ? b.s - uSlot.endAbs : uSlot.startAbs - b.e;
+     return gap >= 0 && gap < MIN_REST;
+    });
+    const wsC = uSlot.endAbs - 1440;
+    const workedC = cNewBusy.reduce(
+     (sum, b) => sum + Math.max(0, Math.min(b.e, uSlot.endAbs) - Math.max(b.s, wsC)), 0);
+    const cMaxOk = (workedC + uSlot.dur) <= MAX_DAILY;
+    const canDoU = canEnter && !cOverlap && !cRestBad && cMaxOk
      && slotRoleOk(candidate, uSlot);
     if (canDoU) {
      // execute 2-swap: remove candidate from blocking, add rep to blocking, add candidate to uSlot
