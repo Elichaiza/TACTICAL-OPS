@@ -442,6 +442,17 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      const rCerts = blockingSlot.requiredCerts.length === 0 ||
       blockingSlot.requiredCerts.every(c => r.certifications?.includes(c));
      if (!rCerts) return false;
+     /* בדיקת מנוחה 8 שעות ל-replacement */
+     const rRestBad = state[r.id].busySlots.some(b => {
+      const gap = b.s >= blockingSlot.endAbs ? b.s - blockingSlot.endAbs : blockingSlot.startAbs - b.e;
+      return gap >= 0 && gap < MIN_REST;
+     });
+     if (rRestBad) return false;
+     /* בדיקת 8 שעות מקסימום ליום ל-replacement */
+     const wsR = blockingSlot.endAbs - 1440;
+     const workedR = state[r.id].busySlots.reduce(
+      (sum, b) => sum + Math.max(0, Math.min(b.e, blockingSlot.endAbs) - Math.max(b.s, wsR)), 0);
+     if (workedR + blockingSlot.dur > MAX_DAILY) return false;
      // temporarily remove candidate to test role
      blockingSlot.assignedIds.delete(candidate.id);
      const idx3 = blockingSlot.assigned.indexOf(cEntry);
