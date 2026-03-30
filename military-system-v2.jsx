@@ -522,7 +522,25 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      const certsOk = slot.requiredCerts.length === 0 ||
       slot.requiredCerts.every(c => lightSoldier.certifications?.includes(c));
      const roleOk = slotRoleOk(lightSoldier, slot);
-     if (!lightBusy && certsOk && roleOk) {
+     /* בדיקת מנוחה 8 שעות לחייל הקל */
+     const lightRestOk = !state[lightId].busySlots.some(b => {
+      const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
+      return gap >= 0 && gap < MIN_REST;
+     });
+     /* בדיקת 8 שעות מקסימום ליום לחייל הקל */
+     const wsL = slot.endAbs - 1440;
+     const workedL = state[lightId].busySlots.reduce(
+      (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, wsL)), 0);
+     const lightMaxOk = (workedL + slot.dur) <= MAX_DAILY;
+     /* בדיקת מנוחה לחייל הכבד אחרי ההסרה */
+     const heavyBusyAfter = state[heavyId].busySlots.filter(b => !(b.s === slot.startAbs && b.e === slot.endAbs));
+     const heavyRestOk = !heavyBusyAfter.some((b1, i1) =>
+      heavyBusyAfter.some((b2, i2) => {
+       if (i1 === i2) return false;
+       const gap = b2.s >= b1.e ? b2.s - b1.e : b1.s - b2.e;
+       return gap >= 0 && gap < MIN_REST;
+      }));
+     if (!lightBusy && certsOk && roleOk && lightRestOk && lightMaxOk && heavyRestOk) {
       const st1 = state[heavyId], st2 = state[lightId];
       slot.assigned.push({ id: lightId, name: lightSoldier.name, role: lightSoldier.role,
        reason: `שעות: ${fmtMins(st2.totalMins + slot.dur)} · שיבוץ #${st2.shiftCount + 1} (eq)` });
