@@ -264,6 +264,11 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  function lv2(soldier, slot) {
   if (!hardOk(soldier, slot)) return false;
   const st = state[soldier.id];
+  /* מנוחה 8 שעות — חוק קשיח */
+  for (const b of st.busySlots) {
+   const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
+   if (gap >= 0 && gap < MIN_REST) return false;
+  }
   const ws = slot.endAbs - 1440;
   const worked = st.busySlots.reduce(
    (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, ws)), 0);
@@ -271,8 +276,13 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   return true; }
  function lv3(soldier, slot) {
   if (!hardOk(soldier, slot)) return false;
-  /* 8 שעות מקסימום ליום — חוק קשיח */
   const st = state[soldier.id];
+  /* מנוחה 8 שעות — חוק קשיח */
+  for (const b of st.busySlots) {
+   const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
+   if (gap >= 0 && gap < MIN_REST) return false;
+  }
+  /* 8 שעות מקסימום ליום — חוק קשיח */
   const ws = slot.endAbs - 1440;
   const worked = st.busySlots.reduce(
    (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, ws)), 0);
