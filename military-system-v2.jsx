@@ -2289,8 +2289,17 @@ function AssignmentTab({ dep, updateDep, notify }) {
        <div style={{marginTop:6,fontSize:10,color:"#334155"}}>🟢 מעט = עדיפות לקבל משימה זו · 🔴 הרבה = יקבל עדיפות נמוכה</div>
       </div> )}
     </FormCard> )}
+   {isGenerating && (
+    <FormCard title="⏳ מחשב שיבוץ אופטימלי...">
+     <div style={{textAlign:"center",padding:"30px 0",color:"#60a5fa",fontSize:16}}>
+      <div style={{fontSize:40,marginBottom:12}}>⚙</div>
+      האלגוריתם מחפש את השיבוץ הטוב ביותר...
+      <div style={{fontSize:12,color:"#475569",marginTop:8}}>יכול לקחת עד 4 שניות</div>
+     </div>
+    </FormCard>
+   )}
    {result && <>
-     
+
      <FormCard title="📊 מד עומס חיילים — שוויון ומנוחה">
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
        {presentSoldiers
