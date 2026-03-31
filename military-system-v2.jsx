@@ -528,29 +528,36 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    const slot = viable[0];
    const pool = present.filter(s => canAssign(s, slot));
    const ranked = rank(pool, slot);
-   /* Forward-checking: prefer soldiers whose assignment doesn't create dead-end slots */
    let pick = null;
    const futureSpecial = allSlots.filter(fs =>
     fs.hardness > 0 && fs.assigned.length < fs.needed);
+   /* Forward-checking: only when slot is tight (few candidates) to avoid O(n³) */
+   const doForwardCheck = pool.length <= 6;
    for (const candidate of ranked) {
     /* שמור תפקידים מיוחדים לסלוטים שדורשים אותם */
     if (slot.hardness === 0 && futureSpecial.length > 0 && SPECIAL_ROLES.includes(candidate.role)) {
      continue; /* נסה מועמד רגיל קודם */
     }
-    /* forward-check: שבץ זמנית ובדוק שאף סלוט לא נשאר ללא מועמדים */
-    doAssign(candidate, slot, '');
-    let deadEnd = false;
-    for (const other of allSlots) {
-     if (other === slot) continue;
-     if (other.assigned.length >= other.needed) continue;
-     const otherCands = present.filter(s => canAssign(s, other));
-     const otherNeed = other.needed - other.assigned.length;
-     if (otherCands.length < otherNeed) { deadEnd = true; break; }
+    if (doForwardCheck) {
+     /* forward-check: שבץ זמנית ובדוק שאף סלוט לא נשאר ללא מועמדים */
+     doAssign(candidate, slot, '');
+     let deadEnd = false;
+     for (const other of allSlots) {
+      if (other === slot || other.assigned.length >= other.needed) continue;
+      const otherNeed = other.needed - other.assigned.length;
+      let count = 0;
+      for (const s of present) {
+       if (canAssign(s, other) && ++count >= otherNeed) break;
+      }
+      if (count < otherNeed) { deadEnd = true; break; }
+     }
+     undoAssign(candidate.id, slot);
+     if (!deadEnd) { pick = candidate; break; }
+    } else {
+     pick = candidate; break;
     }
-    undoAssign(candidate.id, slot);
-    if (!deadEnd) { pick = candidate; break; }
    }
-   /* fallback: אם כולם יוצרים dead-end (או כל הרגילים נוסו), קח ראשון */
+   /* fallback: אם כולם יוצרים dead-end, קח ראשון */
    if (!pick) pick = ranked[0];
    doAssign(pick, slot, buildReason(pick, slot, null));
    round++;
