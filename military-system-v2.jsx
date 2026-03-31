@@ -2032,6 +2032,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [selDate, setSelDate] = useState(todayStr());
  const [selMissions, setSelMissions] = useState([]);
  const [result, setResult] = useState(null);
+ const [isGenerating, setIsGenerating] = useState(false);
  const [historyDays, setHistoryDays] = useState(0);
  const [debugInfo, setDebugInfo] = useState(null);
  const [pinnedAssignments, setPinnedAssignments] = useState({});
