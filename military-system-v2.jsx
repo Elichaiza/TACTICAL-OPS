@@ -614,7 +614,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   }
  }
  function runEqualization() {
-  for (let iter = 0; iter < 300; iter++) {
+  for (let iter = 0; iter < 100; iter++) {
    const ids = present.map(s => s.id);
    const totalAll = ids.reduce((sum, id) => sum + state[id].totalMins, 0);
    const avg = totalAll / ids.length;
