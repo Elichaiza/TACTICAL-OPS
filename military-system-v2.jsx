@@ -2062,7 +2062,15 @@ function AssignmentTab({ dep, updateDep, notify }) {
    dbg[s.id] = { name: s.name, counts: { ...(missionHistory[s.id] || {}) } };
   });
   setDebugInfo({ pastDays, history: dbg, missionNames: Object.fromEntries(missions.map(m=>[m.id,m.name])) });
-  setResult(buildAssignment(missions, dep.soldiers, att[selDate]||{}, missionHistory, att, pinnedAssignments)); }
+  setIsGenerating(true);
+  setResult(null);
+  setTimeout(() => {
+   try {
+    const res = buildAssignment(missions, dep.soldiers, att[selDate]||{}, missionHistory, att, pinnedAssignments);
+    setResult(res);
+   } catch(e) { console.error('Assignment error:', e); }
+   setIsGenerating(false);
+  }, 60); }
  function togglePin(missionId, shiftIdx, sid) {
   const key = `${missionId}__${shiftIdx}`;
   setPinnedAssignments(prev => {
