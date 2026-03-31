@@ -694,13 +694,21 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  }
  /* ── הרצה של כל האסטרטגיות ──────────────────────────────── */
  let bestResult = null;
- const MAX_ATTEMPTS = 6;
+ const DET_ATTEMPTS = 6;  /* 6 אסטרטגיות דטרמיניסטיות */
+ const RND_ATTEMPTS = 20; /* 20 ניסיונות אקראיים */
+ const MAX_ATTEMPTS = DET_ATTEMPTS + RND_ATTEMPTS;
  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
   if (attempt > 0) resetToBaseline();
+  /* ניסיונות 0-5: דטרמיניסטיים, 6+: אקראיים */
+  if (attempt >= DET_ATTEMPTS) {
+   _rankRng = mulberry32(attempt * 9973 + 42);
+  } else {
+   _rankRng = null;
+  }
   runConstraintPropagation();
   runSpecialSlots();
-  runConstraintPropagation(); /* פעם שנייה אחרי סלוטים מיוחדים */
-  runGreedy(attempt);
+  runConstraintPropagation();
+  runGreedy(attempt < DET_ATTEMPTS ? attempt : 0);
   runRedistribution();
   runEqualization();
   const snap = saveFullSnapshot();
@@ -710,6 +718,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   }
   if (snap.unfilled === 0) break; /* מושלם! */
  }
+ _rankRng = null;
  /* שחזר את התוצאה הטובה ביותר */
  if (bestResult) restoreSnapshot(bestResult);
  /* ── 6. הרכב תוצאות ─────────────────────────────────────── */
