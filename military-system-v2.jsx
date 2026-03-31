@@ -546,7 +546,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   }
  }
  function runRedistribution() {
-  for (let rIter = 0; rIter < 200; rIter++) {
+  for (let rIter = 0; rIter < 50; rIter++) {
    const unfilled = allSlots.filter(sl => sl.assigned.length < sl.needed);
    if (!unfilled.length) break;
    unfilled.sort((a, b) => {
