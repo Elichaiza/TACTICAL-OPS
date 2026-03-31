@@ -609,51 +609,6 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      if (filled) break;
     }
     if (filled) break;
-    /* ניסיון 3: 3-swap chain (מוגבל לביצועים) */
-    let _3swapChecks = 0;
-    for (const c1 of present) {
-     if (_3swapChecks++ > 50) break; /* הגבלת חיפוש */
-     if (uSlot.assignedIds.has(c1.id)) continue;
-     if (uSlot.requiredCerts.length > 0 && !uSlot.requiredCerts.every(c => c1.certifications?.includes(c))) continue;
-     const b1 = allSlots.find(sl => sl.assignedIds.has(c1.id) && !sl.assigned.find(a=>a.id===c1.id)?.pinned);
-     if (!b1) continue;
-     const c1E = b1.assigned.find(a => a.id === c1.id);
-     if (c1E?.pinned) continue;
-     for (const c2 of present) {
-      if (c2.id === c1.id || b1.assignedIds.has(c2.id)) continue;
-      if (state[c2.id].busySlots.some(b => b.s < b1.endAbs && b1.startAbs < b.e)) continue;
-      const b2 = allSlots.find(sl => sl.assignedIds.has(c2.id) && !sl.assigned.find(a=>a.id===c2.id)?.pinned && sl !== b1);
-      if (!b2) continue;
-      const c2E = b2.assigned.find(a => a.id === c2.id);
-      if (c2E?.pinned) continue;
-      const c3Pool = present.filter(r => {
-       if (r.id === c1.id || r.id === c2.id || b2.assignedIds.has(r.id)) return false;
-       if (state[r.id].busySlots.some(b => b.s < b2.endAbs && b2.startAbs < b.e)) return false;
-       for (const b of state[r.id].busySlots) {
-        const gap = b.s >= b2.endAbs ? b.s - b2.endAbs : b2.startAbs - b.e;
-        if (gap >= 0 && gap < MIN_REST) return false;
-       }
-       const wsR = b2.endAbs - 1440;
-       const workedR = state[r.id].busySlots.reduce(
-        (sum, b) => sum + Math.max(0, Math.min(b.e, b2.endAbs) - Math.max(b.s, wsR)), 0);
-       return workedR + b2.dur <= MAX_DAILY;
-      });
-      if (!c3Pool.length) continue;
-      const c3 = rank(c3Pool, b2)[0];
-      const c1R = c1E.reason, c2R = c2E.reason;
-      undoAssign(c1.id, b1); undoAssign(c2.id, b2);
-      if (canAssign(c2, b1) && canAssign(c1, uSlot)) {
-       doAssign(c3, b2, buildReason(c3, b2, '(swap3)'));
-       doAssign(c2, b1, buildReason(c2, b1, '(swap3)'));
-       doAssign(c1, uSlot, buildReason(c1, uSlot, '(swap3)'));
-       filled = true; break;
-      } else {
-       doAssign(c2, b2, c2R); doAssign(c1, b1, c1R);
-      }
-     }
-     if (filled) break;
-    }
-    if (filled) break;
    }
    if (!filled) break;
   }
