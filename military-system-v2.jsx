@@ -695,8 +695,10 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  /* ── הרצה של כל האסטרטגיות ──────────────────────────────── */
  let bestResult = null;
  const DET_ATTEMPTS = 6;  /* 6 אסטרטגיות דטרמיניסטיות */
- const RND_ATTEMPTS = 20; /* 20 ניסיונות אקראיים */
+ const RND_ATTEMPTS = 8;  /* 8 ניסיונות אקראיים */
  const MAX_ATTEMPTS = DET_ATTEMPTS + RND_ATTEMPTS;
+ const _startTime = Date.now();
+ const TIME_LIMIT = 8000; /* 8 שניות מקסימום */
  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
   if (attempt > 0) resetToBaseline();
   /* ניסיונות 0-5: דטרמיניסטיים, 6+: אקראיים */
