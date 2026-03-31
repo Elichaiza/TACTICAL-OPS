@@ -297,6 +297,13 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  const missionSeed = {};
  missions.forEach((m, i) => { missionSeed[m.id] = i; });
  const n = present.length || 1;
+ /* מחולל מספרים פסאודו-אקראיים פשוט (Mulberry32) */
+ function mulberry32(a) { return function() {
+  a |= 0; a = a + 0x6D2B79F5 | 0;
+  let t = Math.imul(a ^ a >>> 15, 1 | a);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+ let _rankRng = null; /* null = דטרמיניסטי, אחרת = אקראי */
  function rank(pool, slot) {
   const seed = missionSeed[slot.missionId] || 0;
   return pool.slice().sort((a, b) => {
@@ -312,7 +319,8 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    if (mA !== mB) return mA - mB;
    /* ④ הכי מעט משמרות סה"כ */
    if (A.shiftCount !== B.shiftCount) return A.shiftCount - B.shiftCount;
-   /* ⑤ round-robin למניעת עדיפות קבועה */
+   /* ⑤ round-robin + אקראי בניסיונות חוזרים */
+   if (_rankRng) return _rankRng() - 0.5;
    return ((A.idx + seed) % n) - ((B.idx + seed) % n);
   }); }
  function buildReason(soldier, slot, suffix) {
