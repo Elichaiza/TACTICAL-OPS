@@ -719,6 +719,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    bestResult = snap;
   }
   if (snap.unfilled === 0) break; /* מושלם! */
+  if (Date.now() - _startTime > TIME_LIMIT) break; /* timeout */
  }
  _rankRng = null;
  /* שחזר את התוצאה הטובה ביותר */
