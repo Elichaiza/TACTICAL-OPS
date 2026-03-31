@@ -677,7 +677,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  const TIME_LIMIT = 4000; /* 4 שניות מקסימום */
  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
   if (attempt > 0) resetToBaseline();
-  /* ניסיונות 0-5: דטרמיניסטיים, 6+: אקראיים */
+  /* ניסיונות 0-3: דטרמיניסטיים, 4+: אקראיים */
   if (attempt >= DET_ATTEMPTS) {
    _rankRng = mulberry32(attempt * 9973 + 42);
   } else {
