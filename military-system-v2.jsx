@@ -609,8 +609,10 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      if (filled) break;
     }
     if (filled) break;
-    /* ניסיון 3: 3-swap chain */
+    /* ניסיון 3: 3-swap chain (מוגבל לביצועים) */
+    let _3swapChecks = 0;
     for (const c1 of present) {
+     if (_3swapChecks++ > 500) break; /* הגבלת חיפוש */
      if (uSlot.assignedIds.has(c1.id)) continue;
      if (uSlot.requiredCerts.length > 0 && !uSlot.requiredCerts.every(c => c1.certifications?.includes(c))) continue;
      const b1 = allSlots.find(sl => sl.assignedIds.has(c1.id) && !sl.assigned.find(a=>a.id===c1.id)?.pinned);
