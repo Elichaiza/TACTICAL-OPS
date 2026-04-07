@@ -691,6 +691,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      }
     }
    }
+  }
  }
  function runEqualization() {
   for (let iter = 0; iter < 100; iter++) {
