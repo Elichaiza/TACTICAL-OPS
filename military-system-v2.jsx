@@ -748,6 +748,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   runConstraintPropagation();
   runGreedy(attempt < DET_ATTEMPTS ? attempt : 0);
   runRedistribution();
+  runDeepSwap();
   runEqualization();
   const snap = saveFullSnapshot();
   if (!bestResult || snap.unfilled < bestResult.unfilled ||
