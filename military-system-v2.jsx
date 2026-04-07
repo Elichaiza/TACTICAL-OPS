@@ -632,6 +632,66 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    if (!filled) break;
   }
  }
+ /* ── 3-swap ממוקד: רק כשנשארו 1-2 סלוטים ריקים ── */
+ function runDeepSwap() {
+  const unfilled = allSlots.filter(sl => sl.assigned.length < sl.needed);
+  if (!unfilled.length || unfilled.length > 2) return;
+  for (const uSlot of unfilled) {
+   let filled = false;
+   for (const c1 of present) {
+    if (filled) break;
+    if (uSlot.assignedIds.has(c1.id)) continue;
+    if (uSlot.requiredCerts.length > 0 && !uSlot.requiredCerts.every(c => c1.certifications?.includes(c))) continue;
+    /* מצא סלוטים שחוסמים את c1 מלהיכנס ל-uSlot */
+    const c1Busy = state[c1.id].busySlots;
+    const blocking1 = allSlots.filter(sl =>
+     sl.assignedIds.has(c1.id) && !sl.assigned.find(a => a.id === c1.id)?.pinned);
+    for (const b1 of blocking1) {
+     if (filled) break;
+     const c1Entry = b1.assigned.find(a => a.id === c1.id);
+     if (c1Entry?.pinned) continue;
+     /* נסה למצוא c2 שיכול להחליף את c1 ב-b1 */
+     for (const c2 of present) {
+      if (filled) break;
+      if (c2.id === c1.id || b1.assignedIds.has(c2.id)) continue;
+      if (state[c2.id].busySlots.some(b => b.s < b1.endAbs && b1.startAbs < b.e)) continue;
+      /* c2 חוסם? מצא סלוט שלו שאפשר להחליף */
+      const blocking2 = allSlots.filter(sl =>
+       sl.assignedIds.has(c2.id) && !sl.assigned.find(a => a.id === c2.id)?.pinned && sl !== b1);
+      for (const b2 of blocking2) {
+       if (filled) break;
+       const c2Entry = b2.assigned.find(a => a.id === c2.id);
+       if (c2Entry?.pinned) continue;
+       /* מצא c3 שיכול להחליף את c2 ב-b2 */
+       const c3Pool = present.filter(r => {
+        if (r.id === c1.id || r.id === c2.id || b2.assignedIds.has(r.id)) return false;
+        if (state[r.id].busySlots.some(b => b.s < b2.endAbs && b2.startAbs < b.e)) return false;
+        for (const b of state[r.id].busySlots) {
+         const gap = b.s >= b2.endAbs ? b.s - b2.endAbs : b2.startAbs - b.e;
+         if (gap >= 0 && gap < MIN_REST) return false;
+        }
+        const wsR = b2.endAbs - 1440;
+        const workedR = state[r.id].busySlots.reduce(
+         (sum, b) => sum + Math.max(0, Math.min(b.e, b2.endAbs) - Math.max(b.s, wsR)), 0);
+        return workedR + b2.dur <= MAX_DAILY;
+       });
+       if (!c3Pool.length) continue;
+       const c3 = rank(c3Pool, b2)[0];
+       const c1R = c1Entry.reason, c2R = c2Entry.reason;
+       undoAssign(c2.id, b2); undoAssign(c1.id, b1);
+       if (canAssign(c2, b1) && slotRoleOk(c2, b1) && canAssign(c1, uSlot) && slotRoleOk(c1, uSlot)) {
+        doAssign(c3, b2, buildReason(c3, b2, '(swap3)'));
+        doAssign(c2, b1, buildReason(c2, b1, '(swap3)'));
+        doAssign(c1, uSlot, buildReason(c1, uSlot, '(swap3)'));
+        filled = true;
+       } else {
+        doAssign(c1, b1, c1R); doAssign(c2, b2, c2R);
+       }
+      }
+     }
+    }
+   }
+ }
  function runEqualization() {
   for (let iter = 0; iter < 100; iter++) {
    const ids = present.map(s => s.id);
