@@ -664,19 +664,14 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
        if (filled) break;
        const c2Entry = b2.assigned.find(a => a.id === c2.id);
        if (c2Entry?.pinned) continue;
-       /* מצא c3 שיכול להחליף את c2 ב-b2 */
+       /* מצא c3 שיכול להחליף את c2 ב-b2 — הסר c2 זמנית לבדיקת canAssign */
+       const c2R0 = c2Entry.reason;
+       undoAssign(c2.id, b2);
        const c3Pool = present.filter(r => {
         if (r.id === c1.id || r.id === c2.id || b2.assignedIds.has(r.id)) return false;
-        if (state[r.id].busySlots.some(b => b.s < b2.endAbs && b2.startAbs < b.e)) return false;
-        for (const b of state[r.id].busySlots) {
-         const gap = b.s >= b2.endAbs ? b.s - b2.endAbs : b2.startAbs - b.e;
-         if (gap >= 0 && gap < MIN_REST) return false;
-        }
-        const wsR = b2.endAbs - 1440;
-        const workedR = state[r.id].busySlots.reduce(
-         (sum, b) => sum + Math.max(0, Math.min(b.e, b2.endAbs) - Math.max(b.s, wsR)), 0);
-        return workedR + b2.dur <= MAX_DAILY;
+        return canAssign(r, b2) && slotRoleOk(r, b2);
        });
+       doAssign(c2, b2, c2R0);
        if (!c3Pool.length) continue;
        const c3 = rank(c3Pool, b2)[0];
        const c1R = c1Entry.reason, c2R = c2Entry.reason;
