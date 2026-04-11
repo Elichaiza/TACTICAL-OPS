@@ -472,6 +472,106 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    }
   }
  }
+ /* ── אסטרטגיית זוגות: שיבוץ זוגות משמרות (8ש') כיחידה אטומית ── */
+ function runPairedStrategy() {
+  /* 1. קבץ סלוטים לפי יום */
+  const dayMap = {};
+  for (const sl of allSlots) {
+   const dk = sl.dayNum;
+   if (!dayMap[dk]) dayMap[dk] = [];
+   dayMap[dk].push(sl);
+  }
+  const days = Object.keys(dayMap).map(Number).sort((a, b) => a - b);
+  for (const day of days) {
+   const slots = dayMap[day];
+   /* 2. מצא זוגות: שני סלוטים מאותה משימה באותו יום עם 8ש' פער ביניהם */
+   const byMission = {};
+   for (const sl of slots) {
+    if (!byMission[sl.missionId]) byMission[sl.missionId] = [];
+    byMission[sl.missionId].push(sl);
+   }
+   /* סדר עיבוד: סיור (מיוחדים) קודם, אח"כ רגילים */
+   const missionIds = Object.keys(byMission).sort((a, b) => {
+    const hA = Math.max(...byMission[a].map(s => s.hardness));
+    const hB = Math.max(...byMission[b].map(s => s.hardness));
+    return hB - hA;
+   });
+   for (const mId of missionIds) {
+    const mSlots = byMission[mId].sort((a, b) => a.startAbs - b.startAbs);
+    /* סיור/משימה ארוכה (>= 6 שעות): כל סלוט הוא כבר 8ש' */
+    if (mSlots.length && mSlots[0].dur >= 360) {
+     /* עבד מהמאוחר למוקדם (המצומצם ביותר קודם) */
+     const sorted = mSlots.slice().sort((a, b) => b.startAbs - a.startAbs);
+     for (const slot of sorted) {
+      while (slot.assigned.length < slot.needed) {
+       const pool = present.filter(s => canAssign(s, slot));
+       if (!pool.length) break;
+       /* forward-check */
+       let pick = null;
+       for (const c of rank(pool, slot)) {
+        doAssign(c, slot, '');
+        let ok = true;
+        for (const other of allSlots) {
+         if (other === slot || other.assigned.length >= other.needed) continue;
+         const need = other.needed - other.assigned.length;
+         let cnt = 0;
+         for (const s of present) { if (canAssign(s, other) && ++cnt >= need) break; }
+         if (cnt < need) { ok = false; break; }
+        }
+        undoAssign(c.id, slot);
+        if (ok) { pick = c; break; }
+       }
+       if (!pick) pick = rank(pool, slot)[0];
+       doAssign(pick, slot, buildReason(pick, slot, '(paired)'));
+      }
+     }
+     continue;
+    }
+    /* משימות רגילות (4ש'): מצא זוגות עם 8ש' מנוחה ביניהם */
+    const pairs = [];
+    for (let i = 0; i < mSlots.length; i++) {
+     for (let j = i + 1; j < mSlots.length; j++) {
+      const gap = mSlots[j].startAbs - mSlots[i].endAbs;
+      if (gap === MIN_REST) { /* בדיוק 8 שעות פער */
+       pairs.push([mSlots[i], mSlots[j]]);
+      }
+     }
+    }
+    /* עבד זוגות מהמאוחר למוקדם */
+    pairs.sort((a, b) => b[0].startAbs - a[0].startAbs);
+    for (const [slA, slB] of pairs) {
+     while (slA.assigned.length < slA.needed && slB.assigned.length < slB.needed) {
+      /* מצא חיילים שיכולים לעשות את שני הסלוטים */
+      const pool = present.filter(s => canAssign(s, slA));
+      let pick = null;
+      for (const c of rank(pool, slA)) {
+       doAssign(c, slA, '');
+       if (canAssign(c, slB)) {
+        /* forward-check */
+        doAssign(c, slB, '');
+        let ok = true;
+        for (const other of allSlots) {
+         if (other === slA || other === slB || other.assigned.length >= other.needed) continue;
+         const need = other.needed - other.assigned.length;
+         let cnt = 0;
+         for (const s of present) { if (canAssign(s, other) && ++cnt >= need) break; }
+         if (cnt < need) { ok = false; break; }
+        }
+        undoAssign(c.id, slB);
+        undoAssign(c.id, slA);
+        if (ok) { pick = c; break; }
+       } else {
+        undoAssign(c.id, slA);
+       }
+      }
+      if (!pick) break;
+      doAssign(pick, slA, buildReason(pick, slA, '(pair)'));
+      doAssign(pick, slB, buildReason(pick, slB, '(pair)'));
+     }
+    }
+   }
+  }
+ }
  function runGreedy(strategyNum) {
   let round = strategyNum * 7; /* offset שונה לכל אסטרטגיה */
   let progress = true;
