@@ -917,6 +917,19 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  _rankRng = null;
  /* שחזר את התוצאה הטובה ביותר */
  if (bestResult) restoreSnapshot(bestResult);
+ /* ── DEBUG: הדפס פרטי חיילים עם שעות קיצוניות ── */
+ const _dbgIds = present.map(s => s.id);
+ const _dbgMax = Math.max(..._dbgIds.map(id => state[id].totalMins));
+ const _dbgMin = Math.min(..._dbgIds.map(id => state[id].totalMins));
+ console.log(`[ASSIGN] spread: ${_dbgMax - _dbgMin}min, range: ${_dbgMin}-${_dbgMax}`);
+ for (const s of present) {
+  const st = state[s.id];
+  if (st.totalMins === _dbgMax || st.totalMins === _dbgMin) {
+   const slots = allSlots.filter(sl => sl.assignedIds.has(s.id));
+   console.log(`[ASSIGN] ${s.name} (${s.role}): ${st.totalMins}min = ${st.totalMins/60}h, shifts:`,
+    slots.map(sl => `${sl.missionName} ${sl.start}-${sl.end} day${sl.dayNum} abs[${sl.startAbs}-${sl.endAbs}] dur=${sl.dur}`));
+  }
+ }
  /* ── 6. הרכב תוצאות ─────────────────────────────────────── */
  const resultMap = {};
  missions.forEach(m => {
