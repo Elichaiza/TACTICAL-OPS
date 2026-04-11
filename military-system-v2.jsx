@@ -799,6 +799,90 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    }
    if (!swapped) break;
   }
+  /* שלב 3: החלפה צולבת — heavy ו-light מחליפים סלוטים (cross-swap) */
+  for (let iter = 0; iter < 100; iter++) {
+   const ids = present.map(s => s.id);
+   const maxMins = Math.max(...ids.map(id => state[id].totalMins));
+   const minMins = Math.min(...ids.map(id => state[id].totalMins));
+   if (maxMins - minMins <= 240) break;
+   const avg = ids.reduce((sum, id) => sum + state[id].totalMins, 0) / ids.length;
+   const heavyIds = ids.filter(id => state[id].totalMins > avg + 120).sort((a, b) => state[b].totalMins - state[a].totalMins);
+   const lightIds = ids.filter(id => state[id].totalMins < avg - 120).sort((a, b) => state[a].totalMins - state[b].totalMins);
+   let swapped = false;
+   for (const heavyId of heavyIds) {
+    if (swapped) break;
+    for (const lightId of lightIds) {
+     if (swapped) break;
+     /* מצא זוג סלוטים: slotH (heavy בו, light לא) + slotL (light בו, heavy לא) באותו משך */
+     const heavySlots = allSlots.filter(sl => sl.assignedIds.has(heavyId) && !sl.assignedIds.has(lightId)
+      && !sl.assigned.find(a => a.id === heavyId)?.pinned);
+     const lightSlots = allSlots.filter(sl => sl.assignedIds.has(lightId) && !sl.assignedIds.has(heavyId)
+      && !sl.assigned.find(a => a.id === lightId)?.pinned);
+     for (const slotH of heavySlots) {
+      if (swapped) break;
+      for (const slotL of lightSlots) {
+       if (slotH.dur !== slotL.dur) continue; /* רק אותו משך — כדי לשמור על סך שעות */
+       if (slotH === slotL) continue;
+       const hEntry = slotH.assigned.find(a => a.id === heavyId);
+       const lEntry = slotL.assigned.find(a => a.id === lightId);
+       const hReason = hEntry.reason, lReason = lEntry.reason;
+       const hSoldier = present.find(s => s.id === heavyId);
+       const lSoldier = present.find(s => s.id === lightId);
+       /* הסר את שניהם */
+       undoAssign(heavyId, slotH);
+       undoAssign(lightId, slotL);
+       /* נסה להחליף: heavy→slotL, light→slotH */
+       if (canAssign(lSoldier, slotH) && slotRoleOk(lSoldier, slotH) &&
+           canAssign(hSoldier, slotL) && slotRoleOk(hSoldier, slotL)) {
+        doAssign(lSoldier, slotH, buildReason(lSoldier, slotH, '(cross-eq)'));
+        doAssign(hSoldier, slotL, buildReason(hSoldier, slotL, '(cross-eq)'));
+        /* בדוק שהחלפה באמת שיפרה (heavy נמצא בסלוט קצר יותר, או ש-light קיבל שעות) */
+        /* ... מכיוון שהמשך זהה, ההחלפה לא משנה שעות אלא מאפשרת פתיחת נתיבים */
+        /* אם המשך שווה — ההחלפה שינתה את הזמינות לסלוטים אחרים */
+        swapped = true; break;
+       } else {
+        /* החזר */
+        doAssign({ id: heavyId, name: hEntry.name, role: hEntry.role }, slotH, hReason);
+        doAssign({ id: lightId, name: lEntry.name, role: lEntry.role }, slotL, lReason);
+       }
+      }
+     }
+    }
+   }
+   if (!swapped) break;
+   /* אחרי cross-swap, נסה שוב direct swap */
+   for (let directIter = 0; directIter < 20; directIter++) {
+    const ids2 = present.map(s => s.id);
+    const avg2 = ids2.reduce((sum, id) => sum + state[id].totalMins, 0) / ids2.length;
+    const sortedH2 = ids2.filter(id => state[id].totalMins > avg2).sort((a, b) => state[b].totalMins - state[a].totalMins);
+    let sw2 = false;
+    for (const hId of sortedH2) {
+     const lights2 = ids2.filter(id => state[id].totalMins < avg2).sort((a, b) => state[a].totalMins - state[b].totalMins);
+     for (const lId of lights2) {
+      const d = state[hId].totalMins - state[lId].totalMins;
+      if (d <= 0) continue;
+      for (const slot of allSlots) {
+       if (!slot.assignedIds.has(hId) || slot.assignedIds.has(lId)) continue;
+       if (slot.dur > d) continue;
+       const he = slot.assigned.find(a => a.id === hId);
+       if (he?.pinned) continue;
+       const ls = present.find(s => s.id === lId);
+       const hr = he.reason;
+       undoAssign(hId, slot);
+       if (canAssign(ls, slot) && slotRoleOk(ls, slot)) {
+        doAssign(ls, slot, buildReason(ls, slot, '(eq)'));
+        sw2 = true; break;
+       } else {
+        doAssign({ id: hId, name: he.name, role: he.role }, slot, hr);
+       }
+      }
+      if (sw2) break;
+     }
+     if (sw2) break;
+    }
+    if (!sw2) break;
+   }
+  }
  }
  /* ── הרצה של כל האסטרטגיות ──────────────────────────────── */
  let bestResult = null;
