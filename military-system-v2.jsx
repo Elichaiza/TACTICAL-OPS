@@ -689,10 +689,14 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   }
  }
  function runEqualization() {
-  for (let iter = 0; iter < 100; iter++) {
+  /* שלב 1: החלפות ישירות heavy↔light */
+  for (let iter = 0; iter < 200; iter++) {
    const ids = present.map(s => s.id);
    const totalAll = ids.reduce((sum, id) => sum + state[id].totalMins, 0);
    const avg = totalAll / ids.length;
+   const maxMins = Math.max(...ids.map(id => state[id].totalMins));
+   const minMins = Math.min(...ids.map(id => state[id].totalMins));
+   if (maxMins - minMins <= 240) break; /* פער של עד 4 שעות — מספיק טוב */
    const sortedHeavy = ids.slice().sort((a, b) => state[b].totalMins - state[a].totalMins);
    let swapped = false;
    for (const heavyId of sortedHeavy) {
@@ -702,6 +706,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
     for (const lightId of lights) {
      const diff = state[heavyId].totalMins - state[lightId].totalMins;
      if (diff <= 0) continue;
+     /* החלפה ישירה: heavy יוצא מסלוט, light נכנס */
      for (const slot of allSlots) {
       if (!slot.assignedIds.has(heavyId) || slot.assignedIds.has(lightId)) continue;
       if (slot.dur > diff) continue;
@@ -720,6 +725,77 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      if (swapped) break;
     }
     if (swapped) break;
+   }
+   if (!swapped) break;
+  }
+  /* שלב 2: החלפות דו-שלביות — heavy→slot1→mid, mid→slot2→light */
+  for (let iter = 0; iter < 100; iter++) {
+   const ids = present.map(s => s.id);
+   const maxMins = Math.max(...ids.map(id => state[id].totalMins));
+   const minMins = Math.min(...ids.map(id => state[id].totalMins));
+   if (maxMins - minMins <= 240) break;
+   const avg = ids.reduce((sum, id) => sum + state[id].totalMins, 0) / ids.length;
+   const heavyIds = ids.filter(id => state[id].totalMins > avg).sort((a, b) => state[b].totalMins - state[a].totalMins);
+   const lightIds = ids.filter(id => state[id].totalMins < avg).sort((a, b) => state[a].totalMins - state[b].totalMins);
+   let swapped = false;
+   for (const heavyId of heavyIds) {
+    if (swapped) break;
+    for (const lightId of lightIds) {
+     if (swapped) break;
+     const diff = state[heavyId].totalMins - state[lightId].totalMins;
+     if (diff <= 240) continue;
+     /* מצא סלוט של heavy שאפשר להעביר ל-mid */
+     for (const slot1 of allSlots) {
+      if (swapped) break;
+      if (!slot1.assignedIds.has(heavyId)) continue;
+      const h1Entry = slot1.assigned.find(a => a.id === heavyId);
+      if (h1Entry?.pinned) continue;
+      /* מצא mid שיכול להיכנס ל-slot1 */
+      const midCandidates = present.filter(m => {
+       if (m.id === heavyId || m.id === lightId) return false;
+       if (slot1.assignedIds.has(m.id)) return false;
+       const mState = state[m.id];
+       if (mState.totalMins >= state[heavyId].totalMins) return false;
+       return true;
+      });
+      for (const mid of midCandidates) {
+       if (swapped) break;
+       /* בדוק אם mid יכול להיכנס ל-slot1 */
+       const h1Reason = h1Entry.reason;
+       undoAssign(heavyId, slot1);
+       if (!canAssign(mid, slot1) || !slotRoleOk(mid, slot1)) {
+        doAssign({ id: heavyId, name: h1Entry.name, role: h1Entry.role }, slot1, h1Reason);
+        continue;
+       }
+       doAssign(mid, slot1, '');
+       /* עכשיו מצא סלוט של mid שאפשר להעביר ל-light */
+       for (const slot2 of allSlots) {
+        if (slot2 === slot1) continue;
+        if (!slot2.assignedIds.has(mid.id)) continue;
+        if (slot2.dur > diff) continue;
+        const m2Entry = slot2.assigned.find(a => a.id === mid.id);
+        if (m2Entry?.pinned) continue;
+        const lSoldier = present.find(s => s.id === lightId);
+        const m2Reason = m2Entry.reason;
+        undoAssign(mid.id, slot2);
+        if (canAssign(lSoldier, slot2) && slotRoleOk(lSoldier, slot2)) {
+         doAssign(lSoldier, slot2, buildReason(lSoldier, slot2, '(eq2)'));
+         /* עדכן reason ל-mid ב-slot1 */
+         const midIdx = slot1.assigned.findIndex(a => a.id === mid.id);
+         if (midIdx >= 0) slot1.assigned[midIdx].reason = buildReason(mid, slot1, '(eq2)');
+         swapped = true; break;
+        } else {
+         doAssign({ id: mid.id, name: m2Entry.name, role: m2Entry.role }, slot2, m2Reason);
+        }
+       }
+       if (!swapped) {
+        /* ביטול: החזר הכל */
+        undoAssign(mid.id, slot1);
+        doAssign({ id: heavyId, name: h1Entry.name, role: h1Entry.role }, slot1, h1Reason);
+       }
+      }
+     }
+    }
    }
    if (!swapped) break;
   }
