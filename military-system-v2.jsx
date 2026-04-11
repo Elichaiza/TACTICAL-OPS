@@ -827,7 +827,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       (snap.unfilled === bestResult.unfilled && snap.spread < bestResult.spread)) {
    bestResult = snap;
   }
-  if (snap.unfilled === 0) break; /* מושלם! */
+  if (snap.unfilled === 0 && snap.spread <= 240) break; /* מושלם + שוויוני! */
   if (Date.now() - _startTime > TIME_LIMIT) break; /* timeout */
  }
  _rankRng = null;
