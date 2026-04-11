@@ -607,26 +607,14 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      for (const bSlot of blockingSlots) {
       const cEntry = bSlot.assigned.find(a => a.id === candidate.id);
       if (cEntry?.pinned) continue;
+      /* הסר זמנית את candidate מ-bSlot ובדוק מי יכול להחליף */
+      const cReason0 = cEntry.reason;
+      undoAssign(candidate.id, bSlot);
       const reps = present.filter(r => {
        if (r.id === candidate.id || bSlot.assignedIds.has(r.id) || uSlot.assignedIds.has(r.id)) return false;
-       if (state[r.id].busySlots.some(b => b.s < bSlot.endAbs && bSlot.startAbs < b.e)) return false;
-       if (bSlot.requiredCerts.length > 0 && !bSlot.requiredCerts.every(c => r.certifications?.includes(c))) return false;
-       for (const b of state[r.id].busySlots) {
-        const gap = b.s >= bSlot.endAbs ? b.s - bSlot.endAbs : bSlot.startAbs - b.e;
-        if (gap >= 0 && gap < MIN_REST) return false;
-       }
-       const wsR = bSlot.endAbs - 1440;
-       const workedR = state[r.id].busySlots.reduce(
-        (sum, b) => sum + Math.max(0, Math.min(b.e, bSlot.endAbs) - Math.max(b.s, wsR)), 0);
-       if (workedR + bSlot.dur > MAX_DAILY) return false;
-       bSlot.assignedIds.delete(candidate.id);
-       const ti = bSlot.assigned.indexOf(cEntry);
-       bSlot.assigned.splice(ti, 1);
-       const rok = slotRoleOk(r, bSlot);
-       bSlot.assigned.splice(ti, 0, cEntry);
-       bSlot.assignedIds.add(candidate.id);
-       return rok;
+       return canAssign(r, bSlot) && slotRoleOk(r, bSlot);
       });
+      doAssign(candidate, bSlot, cReason0);
       if (!reps.length) continue;
       const rep = rank(reps, bSlot)[0];
       const cReason = cEntry.reason;
