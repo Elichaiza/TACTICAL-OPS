@@ -534,8 +534,18 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      return ((b.missionIdx + round) % numMissions)
        - ((a.missionIdx + round) % numMissions) || a.startAbs - b.startAbs;
     });
+   } else if (strategyNum === 5) {
+    /* אסטרטגיה 5: יום-יום + מאוחר קודם בתוך כל יום (מבנה אופטימלי) */
+    viable.sort((a, b) => {
+     if (a.dayNum !== b.dayNum) return a.dayNum - b.dayNum; /* יום 1 קודם */
+     const soA = a.shiftOfDay || 0, soB = b.shiftOfDay || 0;
+     if (soA !== soB) return soB - soA; /* מאוחר קודם בתוך היום */
+     if (a._cands !== b._cands) return a._cands - b._cands;
+     return ((a.missionIdx - round) % numMissions + numMissions) % numMissions
+       - ((b.missionIdx - round) % numMissions + numMissions) % numMissions;
+    });
    } else {
-    /* אסטרטגיה 5: מצומצם + round-robin שונה */
+    /* אסטרטגיה 6+: מצומצם + round-robin שונה */
     viable.sort((a, b) => {
      if (a._cands !== b._cands) return a._cands - b._cands;
      const fA = (missionProgress[a.missionId]||0) / (missionTotalNeeded[a.missionId]||1);
