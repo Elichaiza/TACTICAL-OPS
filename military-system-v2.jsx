@@ -554,6 +554,19 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      return b.startAbs - a.startAbs; /* מאוחר קודם */
     });
    }
+   /* בניסיונות אקראיים — ערבב קצת את סדר הסלוטים */
+   if (_rankRng && viable.length > 1) {
+    for (let k = viable.length - 1; k > 0; k--) {
+     const j = Math.floor(_rankRng() * (k + 1));
+     if (j !== k) { const t = viable[k]; viable[k] = viable[j]; viable[j] = t; }
+    }
+    /* עדיין העדף סלוטים מצומצמים (עם פחות מועמדים) */
+    viable.sort((a, b) => {
+     if (a._cands <= 2 && b._cands > 2) return -1;
+     if (b._cands <= 2 && a._cands > 2) return 1;
+     return 0; /* שמור את הסדר האקראי לשאר */
+    });
+   }
    const slot = viable[0];
    const pool = present.filter(s => canAssign(s, slot));
    const ranked = rank(pool, slot);
