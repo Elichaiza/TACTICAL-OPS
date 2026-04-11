@@ -259,10 +259,29 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    if (gap >= 0 && gap < MIN_REST) return false;
   }
   /* מקסימום 8 שעות ב-24 שעות — חוק קשיח */
-  const ws = slot.endAbs - 1440;
-  const worked = st.busySlots.reduce(
-   (sum, b) => sum + Math.max(0, Math.min(b.e, slot.endAbs) - Math.max(b.s, ws)), 0);
-  if (worked + slot.dur > MAX_DAILY) return false;
+  /* בודק כל חלון 24 שעות קריטי שמכיל את הסלוט החדש */
+  const allIvs = [...st.busySlots, { s: slot.startAbs, e: slot.endAbs }];
+  const checked = new Set();
+  for (const iv of allIvs) {
+   /* חלון שמתחיל ב-iv.s */
+   const w1 = iv.s;
+   if (w1 <= slot.startAbs && w1 + 1440 >= slot.endAbs && !checked.has(w1)) {
+    checked.add(w1);
+    let total = Math.max(0, Math.min(slot.endAbs, w1 + 1440) - Math.max(slot.startAbs, w1));
+    for (const b of st.busySlots)
+     total += Math.max(0, Math.min(b.e, w1 + 1440) - Math.max(b.s, w1));
+    if (total > MAX_DAILY) return false;
+   }
+   /* חלון שנגמר ב-iv.e */
+   const w2 = iv.e - 1440;
+   if (w2 <= slot.startAbs && w2 + 1440 >= slot.endAbs && !checked.has(w2)) {
+    checked.add(w2);
+    let total = Math.max(0, Math.min(slot.endAbs, w2 + 1440) - Math.max(slot.startAbs, w2));
+    for (const b of st.busySlots)
+     total += Math.max(0, Math.min(b.e, w2 + 1440) - Math.max(b.s, w2));
+    if (total > MAX_DAILY) return false;
+   }
+  }
   return true; }
  /* ── 3c. פעולות שיבוץ/הסרה ─────────────────────────────── */
  function doAssign(soldier, slot, reason) {
