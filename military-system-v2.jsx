@@ -531,33 +531,26 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    let pick = null;
    const futureSpecial = allSlots.filter(fs =>
     fs.hardness > 0 && fs.assigned.length < fs.needed);
-   /* Forward-checking: תמיד בודק שהשיבוץ לא יוצר dead-end */
-   let bestFlex = -1;
+   /* Forward-checking: בודק שהשיבוץ לא יוצר dead-end, שומר על סדר הדירוג (שעות) */
    for (const candidate of ranked) {
     /* שמור תפקידים מיוחדים לסלוטים שדורשים אותם */
     if (slot.hardness === 0 && futureSpecial.length > 0 && SPECIAL_ROLES.includes(candidate.role)) {
-     continue; /* נסה מועמד רגיל קודם */
+     continue;
     }
     /* forward-check: שבץ זמנית ובדוק שאף סלוט לא נשאר ללא מועמדים */
     doAssign(candidate, slot, '');
     let deadEnd = false;
-    let flex = 0; /* מדד גמישות: כמה מועמדים נשארים בכל הסלוטים */
     for (const other of allSlots) {
      if (other === slot || other.assigned.length >= other.needed) continue;
      const otherNeed = other.needed - other.assigned.length;
      let count = 0;
      for (const s of present) {
-      if (canAssign(s, other)) { count++; if (count >= otherNeed + 3) break; }
+      if (canAssign(s, other) && ++count >= otherNeed) break;
      }
      if (count < otherNeed) { deadEnd = true; break; }
-     flex += count - otherNeed; /* עודף מועמדים = גמישות */
     }
     undoAssign(candidate.id, slot);
-    if (!deadEnd) {
-     if (!pick || flex > bestFlex) { pick = candidate; bestFlex = flex; }
-     /* אם כבר מצאנו מועמד טוב, בדוק רק עוד 2 — לא את כולם */
-     if (bestFlex > 0 && ranked.indexOf(candidate) >= 3) break;
-    }
+    if (!deadEnd) { pick = candidate; break; }
    }
    /* fallback: אם כולם יוצרים dead-end, קח ראשון */
    if (!pick) pick = ranked[0];
