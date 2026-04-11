@@ -1025,8 +1025,13 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    _rankRng = null;
   }
   runConstraintPropagation();
-  runSpecialSlots();
-  runConstraintPropagation();
+  if (attempt <= 1) {
+   /* ניסיונות 0-1: אסטרטגיית זוגות — שיבוץ משמרות כזוגות של 8ש' */
+   runPairedStrategy();
+  } else {
+   runSpecialSlots();
+   runConstraintPropagation();
+  }
   runGreedy(attempt < DET_ATTEMPTS ? attempt : 0);
   runRedistribution();
   runDeepSwap();
