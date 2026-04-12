@@ -472,82 +472,75 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    }
   }
  }
- /* ── אסטרטגיית זוגות: שיבוץ זוגות משמרות (8ש') כיחידה אטומית ── */
+ /* ── אסטרטגיית זוגות: שיבוץ לפי קבוצות זמן — כל חייל נשאר באותה קבוצה בכל הימים ── */
  function runPairedStrategy() {
-  /* 1. קבץ סלוטים לפי יום */
-  const dayMap = {};
-  for (const sl of allSlots) {
-   const dk = sl.dayNum;
-   if (!dayMap[dk]) dayMap[dk] = [];
-   dayMap[dk].push(sl);
+  /* 1. זהה קבוצות זמן: shiftOfDay (1,4)=group1, (2,5)=group2, (3,6)=group3, patrol shiftOfDay=groupNum */
+  function getTimeGroup(slot) {
+   if (slot.dur >= 360) return slot.shiftOfDay; /* סיור */
+   const sod = slot.shiftOfDay;
+   if (sod === 1 || sod === 4) return 1;
+   if (sod === 2 || sod === 5) return 2;
+   return 3;
   }
-  const days = Object.keys(dayMap).map(Number).sort((a, b) => a - b);
-  for (const day of days) {
-   const slots = dayMap[day];
-   /* 2. מצא זוגות: שני סלוטים מאותה משימה באותו יום עם 8ש' פער ביניהם */
-   const byMission = {};
-   for (const sl of slots) {
-    if (!byMission[sl.missionId]) byMission[sl.missionId] = [];
-    byMission[sl.missionId].push(sl);
+  /* 2. קבץ סלוטים לפי קבוצת-זמן, ללא תלות ביום */
+  const timeGroups = {}; /* groupNum -> { patrols: {dayNum -> [slots]}, pairs: {dayNum -> {missionId -> [slA,slB]}} } */
+  for (const sl of allSlots) {
+   const gn = getTimeGroup(sl);
+   if (!timeGroups[gn]) timeGroups[gn] = { patrols: {}, pairs: {} };
+   const tg = timeGroups[gn];
+   if (sl.dur >= 360) {
+    if (!tg.patrols[sl.dayNum]) tg.patrols[sl.dayNum] = [];
+    tg.patrols[sl.dayNum].push(sl);
+   } else {
+    if (!tg.pairs[sl.dayNum]) tg.pairs[sl.dayNum] = {};
+    if (!tg.pairs[sl.dayNum][sl.missionId]) tg.pairs[sl.dayNum][sl.missionId] = [];
+    tg.pairs[sl.dayNum][sl.missionId].push(sl);
    }
-   /* סדר עיבוד: רגילים (זוגות) קודם, אח"כ סיור — כי זוגות יותר מצומצמים בין ימים */
-   const missionIds = Object.keys(byMission).sort((a, b) => {
-    const durA = Math.max(...byMission[a].map(s => s.dur));
-    const durB = Math.max(...byMission[b].map(s => s.dur));
-    return durA - durB; /* משימות קצרות (4ש' = זוגות) קודם */
-   });
-   for (const mId of missionIds) {
-    const mSlots = byMission[mId].sort((a, b) => a.startAbs - b.startAbs);
-    /* סיור/משימה ארוכה (>= 6 שעות): כל סלוט הוא כבר 8ש' */
-    if (mSlots.length && mSlots[0].dur >= 360) {
-     /* עבד מהמאוחר למוקדם (המצומצם ביותר קודם) */
-     const sorted = mSlots.slice().sort((a, b) => b.startAbs - a.startAbs);
-     for (const slot of sorted) {
-      while (slot.assigned.length < slot.needed) {
-       const pool = present.filter(s => canAssign(s, slot));
-       if (!pool.length) break;
-       /* forward-check */
-       let pick = null;
-       for (const c of rank(pool, slot)) {
-        doAssign(c, slot, '');
-        let ok = true;
-        for (const other of allSlots) {
-         if (other === slot || other.assigned.length >= other.needed) continue;
-         const need = other.needed - other.assigned.length;
-         let cnt = 0;
-         for (const s of present) { if (canAssign(s, other) && ++cnt >= need) break; }
-         if (cnt < need) { ok = false; break; }
-        }
-        undoAssign(c.id, slot);
-        if (ok) { pick = c; break; }
+  }
+  /* 3. עבד מקבוצה 3 (הכי מצומצמת) ל-1 (הכי גמישה) */
+  const groupNums = Object.keys(timeGroups).map(Number).sort((a, b) => b - a);
+  for (const gn of groupNums) {
+   const tg = timeGroups[gn];
+   const days = [...new Set([...Object.keys(tg.patrols), ...Object.keys(tg.pairs)])].map(Number).sort((a,b) => a-b);
+   /* 3a. סיור — שבץ חיילים לכל הימים */
+   for (const day of days) {
+    const pSlots = tg.patrols[day] || [];
+    for (const slot of pSlots) {
+     while (slot.assigned.length < slot.needed) {
+      const pool = present.filter(s => canAssign(s, slot));
+      if (!pool.length) break;
+      let pick = null;
+      for (const c of rank(pool, slot)) {
+       doAssign(c, slot, '');
+       let ok = true;
+       for (const other of allSlots) {
+        if (other === slot || other.assigned.length >= other.needed) continue;
+        const need = other.needed - other.assigned.length;
+        let cnt = 0;
+        for (const s of present) { if (canAssign(s, other) && ++cnt >= need) break; }
+        if (cnt < need) { ok = false; break; }
        }
-       if (!pick) pick = rank(pool, slot)[0];
-       doAssign(pick, slot, buildReason(pick, slot, '(paired)'));
+       undoAssign(c.id, slot);
+       if (ok) { pick = c; break; }
       }
-     }
-     continue;
-    }
-    /* משימות רגילות (4ש'): מצא זוגות עם 8ש' מנוחה ביניהם */
-    const pairs = [];
-    for (let i = 0; i < mSlots.length; i++) {
-     for (let j = i + 1; j < mSlots.length; j++) {
-      const gap = mSlots[j].startAbs - mSlots[i].endAbs;
-      if (gap === MIN_REST) { /* בדיוק 8 שעות פער */
-       pairs.push([mSlots[i], mSlots[j]]);
-      }
+      if (!pick) pick = rank(pool, slot)[0];
+      doAssign(pick, slot, buildReason(pick, slot, '(tg-patrol)'));
      }
     }
-    /* עבד זוגות מהמאוחר למוקדם */
-    pairs.sort((a, b) => b[0].startAbs - a[0].startAbs);
-    for (const [slA, slB] of pairs) {
+   }
+   /* 3b. זוגות רגילים — שבץ כל חייל לזוג שלם (8ש') */
+   for (const day of days) {
+    const dayPairs = tg.pairs[day] || {};
+    for (const mId of Object.keys(dayPairs)) {
+     const mSlots = dayPairs[mId].sort((a, b) => a.startAbs - b.startAbs);
+     if (mSlots.length < 2) continue;
+     const slA = mSlots[0], slB = mSlots[1];
      while (slA.assigned.length < slA.needed && slB.assigned.length < slB.needed) {
-      /* מצא חיילים שיכולים לעשות את שני הסלוטים */
       const pool = present.filter(s => canAssign(s, slA));
       let pick = null;
       for (const c of rank(pool, slA)) {
        doAssign(c, slA, '');
        if (canAssign(c, slB)) {
-        /* forward-check */
         doAssign(c, slB, '');
         let ok = true;
         for (const other of allSlots) {
@@ -560,13 +553,11 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
         undoAssign(c.id, slB);
         undoAssign(c.id, slA);
         if (ok) { pick = c; break; }
-       } else {
-        undoAssign(c.id, slA);
-       }
+       } else { undoAssign(c.id, slA); }
       }
       if (!pick) break;
-      doAssign(pick, slA, buildReason(pick, slA, '(pair)'));
-      doAssign(pick, slB, buildReason(pick, slB, '(pair)'));
+      doAssign(pick, slA, buildReason(pick, slA, '(tg-pair)'));
+      doAssign(pick, slB, buildReason(pick, slB, '(tg-pair)'));
      }
     }
    }
