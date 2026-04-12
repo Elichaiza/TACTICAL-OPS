@@ -620,6 +620,13 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
        usedSeats.add(si);
       }
      }
+     /* DEBUG: show rotation results */
+     console.log(`[G${gn} D${day}] used=${usedSoldiers.size}/${grpSoldiers.length} seats=${usedSeats.size}/${daySeats.length} hard=${hardSeats.length}`);
+     for (const gs of grpSoldiers) {
+      const hist = prevHist[gs.id] || [];
+      const assigned = usedSoldiers.has(gs.id) ? 'YES' : 'NO';
+      console.log(`  ${gs.name}(${gs.role}): ${hist.map(h=>`${h.type}:${h.missionId.substring(0,6)}`).join('→')} assigned=${assigned}`);
+     }
     }
    }
   }
