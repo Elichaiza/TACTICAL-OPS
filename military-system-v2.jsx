@@ -474,133 +474,150 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  }
  /* ── אסטרטגיית זוגות: שיבוץ לפי קבוצות זמן — כל חייל נשאר באותה קבוצה בכל הימים ── */
  function runPairedStrategy() {
-  /* 1. זהה קבוצות זמן: shiftOfDay (1,4)=group1, (2,5)=group2, (3,6)=group3, patrol shiftOfDay=groupNum */
   function getTimeGroup(slot) {
-   if (slot.dur >= 360) return slot.shiftOfDay; /* סיור */
+   if (slot.dur >= 360) return slot.shiftOfDay;
    const sod = slot.shiftOfDay;
    if (sod === 1 || sod === 4) return 1;
    if (sod === 2 || sod === 5) return 2;
    return 3;
   }
-  /* 2. קבץ סלוטים לפי קבוצת-זמן, ללא תלות ביום */
-  const timeGroups = {}; /* groupNum -> { patrols: {dayNum -> [slots]}, pairs: {dayNum -> {missionId -> [slA,slB]}} } */
+  /* ── 1. קבץ סלוטים ל��י קבוצת-זמן ויום ── */
+  const tgMap = {};
   for (const sl of allSlots) {
    const gn = getTimeGroup(sl);
-   if (!timeGroups[gn]) timeGroups[gn] = { patrols: {}, pairs: {} };
-   const tg = timeGroups[gn];
-   if (sl.dur >= 360) {
-    if (!tg.patrols[sl.dayNum]) tg.patrols[sl.dayNum] = [];
-    tg.patrols[sl.dayNum].push(sl);
-   } else {
-    if (!tg.pairs[sl.dayNum]) tg.pairs[sl.dayNum] = {};
-    if (!tg.pairs[sl.dayNum][sl.missionId]) tg.pairs[sl.dayNum][sl.missionId] = [];
-    tg.pairs[sl.dayNum][sl.missionId].push(sl);
-   }
+   if (!tgMap[gn]) tgMap[gn] = {};
+   if (!tgMap[gn][sl.dayNum]) tgMap[gn][sl.dayNum] = [];
+   tgMap[gn][sl.dayNum].push(sl);
   }
-  /* 3. עבד מקבוצה 3 (הכי מצומצמת) ל-1 (הכי גמישה) */
-  const groupNums = Object.keys(timeGroups).map(Number).sort((a, b) => b - a);
+  /* ─�� 2. בנה "מושבים" מאוחדים — long (סיור/8ש+) ו-pair (זוג 4ש) ── */
+  /* מושב = מיקום אחד של חייל ליום: סיור בודד או זוג משמרות רגילות */
+  function buildSeats(daySlots) {
+   const seats = [];
+   const byM = {};
+   for (const sl of daySlots) {
+    if (!byM[sl.missionId]) byM[sl.missionId] = [];
+    byM[sl.missionId].push(sl);
+   }
+   for (const mId of Object.keys(byM)) {
+    const ms = byM[mId].sort((a, b) => a.startAbs - b.startAbs);
+    if (ms[0].dur >= 360) {
+     /* סיור / משימה ארוכה — סלוט בודד, needed מושבים */
+     for (let i = 0; i < ms[0].needed; i++)
+      seats.push({ type: 'long', slots: [ms[0]], missionId: mId, missionName: ms[0].missionName, hardness: ms[0].hardness });
+    } else if (ms.length >= 2) {
+     /* זוג משמרות רגילות — needed מושבים */
+     for (let i = 0; i < ms[0].needed; i++)
+      seats.push({ type: 'pair', slots: [ms[0], ms[1]], missionId: mId, missionName: ms[0].missionName, hardness: Math.max(ms[0].hardness, ms[1].hardness) });
+    }
+   }
+   return seats;
+  }
+  /* בדיקה: האם חייל יכול לשבת במושב? */
+  function canSeat(soldier, seat) {
+   if (seat.type === 'long') {
+    return seat.slots[0].assigned.length < seat.slots[0].needed && canAssign(soldier, seat.slots[0]);
+   }
+   const [a, b] = seat.slots;
+   if (a.assigned.length >= a.needed || b.assigned.length >= b.needed) return false;
+   if (!canAssign(soldier, a)) return false;
+   doAssign(soldier, a, '');
+   const ok = canAssign(soldier, b);
+   undoAssign(soldier.id, a);
+   return ok;
+  }
+  /* שיבוץ חייל למושב */
+  function doSeat(soldier, seat, tag) {
+   for (const sl of seat.slots)
+    if (sl.assigned.length < sl.needed)
+     doAssign(soldier, sl, buildReason(soldier, sl, tag));
+  }
+  /* ── 3. עבד כל קבוצת-זמן: מצומצמת (3) → גמישה (1) ── */
+  const groupNums = Object.keys(tgMap).map(Number).sort((a, b) => b - a);
   for (const gn of groupNums) {
-   const tg = timeGroups[gn];
-   const days = [...new Set([...Object.keys(tg.patrols), ...Object.keys(tg.pairs)])].map(Number).sort((a,b) => a-b);
-   /* 3a. סיור — שבץ אותם חיילים לכל הימים */
-   const allPatrolSlots = days.flatMap(d => tg.patrols[d] || []);
-   if (allPatrolSlots.length > 0) {
-    const needed = allPatrolSlots[0].needed; /* כמה חיילים לכל סלוט סיור */
-    /* מצא חיילים שיכולים לעשות סיור בכל הימים של הקבוצה */
-    const patrolsByDay = days.map(d => (tg.patrols[d] || [])[0]).filter(Boolean);
-    for (let si = 0; si < needed; si++) {
-     /* מצא חייל שיכול לעשות את כל סלוטי הסיור */
-     const pool = present.filter(s => patrolsByDay.every(sl => canAssign(s, sl)));
-     if (!pool.length) break;
-     const pick = rank(pool, patrolsByDay[0])[0];
-     for (const sl of patrolsByDay) {
-      if (sl.assigned.length < sl.needed) {
-       doAssign(pick, sl, buildReason(pick, sl, '(tg-patrol)'));
+   const dayMap = tgMap[gn];
+   const days = Object.keys(dayMap).map(Number).sort((a, b) => a - b);
+   if (!days.length) continue;
+   const seatsPerDay = {};
+   for (const d of days) seatsPerDay[d] = buildSeats(dayMap[d]);
+   if (!seatsPerDay[days[0]]?.length) continue;
+   /* מעקב היסטוריה לגיוון בין ימים */
+   const prevHist = {}; /* soldierId → [{missionId, type}] */
+   const grpSoldiers = []; /* חיילים שהוקצו לקבוצה הזו */
+   for (let di = 0; di < days.length; di++) {
+    const day = days[di];
+    const daySeats = seatsPerDay[day];
+    if (!daySeats?.length) continue;
+    if (di === 0) {
+     /* ── יום 1: ש��בוץ בסיסי — מושבים עם דרישות מיוחדות קודם ── */
+     const order = daySeats.map((_, i) => i)
+      .sort((a, b) => daySeats[b].hardness - daySeats[a].hardness);
+     const usedIds = new Set();
+     for (const si of order) {
+      const seat = daySeats[si];
+      const pool = present.filter(s => !usedIds.has(s.id) && canSeat(s, seat));
+      if (!pool.length) continue;
+      const pick = rank(pool, seat.slots[0])[0];
+      doSeat(pick, seat, '(tg-d1)');
+      usedIds.add(pick.id);
+      grpSoldiers.push(pick);
+      prevHist[pick.id] = [{ missionId: seat.missionId, type: seat.type }];
+     }
+    } else {
+     /* ── ימים 2+: רוטציה עם מקסימום גיוון (סיור↔רגיל + משימות שונות) ── */
+     /* ציון גיוון: כמה שונה מושב יעד מכל הימים הקודמים */
+     function vScore(soldierId, seat) {
+      const prev = prevHist[soldierId] || [];
+      let v = 0;
+      for (const p of prev) {
+       if (p.type !== seat.type) v += 10;  /* סוג שונה: סיור↔רגיל */
+       if (p.missionId !== seat.missionId) v += 5; /* משימה שונה */
       }
+      return v;
      }
-    }
-    /* מלא סלוטים שנשארו בודדים */
-    for (const sl of allPatrolSlots) {
-     while (sl.assigned.length < sl.needed) {
-      const pool = present.filter(s => canAssign(s, sl));
-      if (!pool.length) break;
-      doAssign(rank(pool, sl)[0], sl, buildReason(rank(pool, sl)[0], sl, '(tg-patrol)'));
+     const usedSeats = new Set(), usedSoldiers = new Set();
+     /* שלב א: מושבים עם דרישות מיוחדות — מלא אותם קודם */
+     const hardSeats = daySeats.map((s, i) => ({ s, i }))
+      .filter(({ s }) => s.hardness > 0)
+      .sort((a, b) => b.s.hardness - a.s.hardness);
+     for (const { s: seat, i: si } of hardSeats) {
+      if (seat.slots.every(sl => sl.assigned.length >= sl.needed)) continue;
+      const pool = grpSoldiers.filter(s => !usedSoldiers.has(s.id) && canSeat(s, seat));
+      if (!pool.length) continue;
+      /* בחר חייל עם הכי הרבה גיוון */
+      pool.sort((a, b) => vScore(b.id, seat) - vScore(a.id, seat));
+      const pick = pool[0];
+      const vs = vScore(pick.id, seat);
+      doSeat(pick, seat, vs > 0 ? '(tg-rotate)' : '(tg-same)');
+      usedSeats.add(si); usedSoldiers.add(pick.id);
+      if (!prevHist[pick.id]) prevHist[pick.id] = [];
+      prevHist[pick.id].push({ missionId: seat.missionId, type: seat.type });
      }
-    }
-   }
-   /* 3b. זוגות רגילים — שבץ חיילים לזוגות עם רוטציית משימות בין ימים */
-   /* אסוף זוגות לפי יום ומשימה */
-   const dayMissionPairs = {}; /* day -> { missionId -> [slA, slB] } */
-   for (const day of days) {
-    dayMissionPairs[day] = {};
-    const dayP = tg.pairs[day] || {};
-    for (const mId of Object.keys(dayP)) {
-     const mSlots = dayP[mId].sort((a, b) => a.startAbs - b.startAbs);
-     if (mSlots.length >= 2) dayMissionPairs[day][mId] = [mSlots[0], mSlots[1]];
-    }
-   }
-   const missionsInGroup = [...new Set(days.flatMap(d => Object.keys(dayMissionPairs[d] || {})))];
-   if (missionsInGroup.length > 0 && days.length > 0) {
-    const needed = 1; /* חייל אחד לכל זוג */
-    const groupSoldiers = []; /* חיילים שמשובצים בקבוצה הזו */
-    /* יום 1: שבץ חיילים למשימות */
-    const firstDay = days[0];
-    for (const mId of missionsInGroup) {
-     const pair = dayMissionPairs[firstDay]?.[mId];
-     if (!pair) continue;
-     const [slA, slB] = pair;
-     while (slA.assigned.length < slA.needed && slB.assigned.length < slB.needed) {
-      const pool = present.filter(s =>
-       canAssign(s, slA) && !groupSoldiers.some(gs => gs.id === s.id));
-      let pick = null;
-      for (const c of rank(pool, slA)) {
-       doAssign(c, slA, '');
-       if (canAssign(c, slB)) { undoAssign(c.id, slA); pick = c; break; }
-       undoAssign(c.id, slA);
-      }
-      if (!pick) break;
-      doAssign(pick, slA, buildReason(pick, slA, '(tg-pair)'));
-      doAssign(pick, slB, buildReason(pick, slB, '(tg-pair)'));
-      groupSoldiers.push(pick);
+     /* שלב ב: שאר המושבים — חיילים מצומצמים קודם, גיוון מקסימלי */
+     const remaining = grpSoldiers.filter(s => !usedSoldiers.has(s.id))
+      .map(s => ({ soldier: s, opts: daySeats.filter((st, i) => !usedSeats.has(i) && canSeat(s, st)).length }))
+      .sort((a, b) => a.opts - b.opts);
+     for (const { soldier } of remaining) {
+      if (usedSoldiers.has(soldier.id)) continue;
+      const avail = daySeats.map((s, i) => ({ s, i }))
+       .filter(({ s, i }) => !usedSeats.has(i) && canSeat(soldier, s))
+       .sort((a, b) => vScore(soldier.id, b.s) - vScore(soldier.id, a.s));
+      if (!avail.length) continue;
+      const { s: seat, i: si } = avail[0];
+      const vs = vScore(soldier.id, seat);
+      doSeat(soldier, seat, vs > 0 ? '(tg-rotate)' : '(tg-same)');
+      usedSeats.add(si); usedSoldiers.add(soldier.id);
+      if (!prevHist[soldier.id]) prevHist[soldier.id] = [];
+      prevHist[soldier.id].push({ missionId: seat.missionId, type: seat.type });
      }
-    }
-    /* ימים נוספים: רוטציה — כל חייל עובר למשימה אחרת */
-    for (let di = 1; di < days.length; di++) {
-     const day = days[di];
-     const rotation = di; /* כמה מקומות להזיז */
-     for (let si = 0; si < groupSoldiers.length; si++) {
-      const soldier = groupSoldiers[si];
-      /* בחר משימה אחרת (מסובבת) */
-      const targetMIdx = (si + rotation) % missionsInGroup.length;
-      const mId = missionsInGroup[targetMIdx];
-      const pair = dayMissionPairs[day]?.[mId];
-      if (!pair) continue;
-      const [slA, slB] = pair;
-      if (slA.assigned.length >= slA.needed) continue;
-      /* בדוק שהחייל יכול לעשות את הזוג */
-      if (!canAssign(soldier, slA)) continue;
-      doAssign(soldier, slA, '');
-      if (canAssign(soldier, slB)) {
-       undoAssign(soldier.id, slA);
-       doAssign(soldier, slA, buildReason(soldier, slA, '(tg-rotate)'));
-       doAssign(soldier, slB, buildReason(soldier, slB, '(tg-rotate)'));
-      } else {
-       undoAssign(soldier.id, slA);
-       /* fallback: נסה את אותה משימה כמו יום 1 */
-       const origMIdx = si % missionsInGroup.length;
-       const origMId = missionsInGroup[origMIdx];
-       const origPair = dayMissionPairs[day]?.[origMId];
-       if (origPair) {
-        const [oA, oB] = origPair;
-        if (oA.assigned.length < oA.needed && canAssign(soldier, oA)) {
-         doAssign(soldier, oA, '');
-         if (canAssign(soldier, oB)) {
-          undoAssign(soldier.id, oA);
-          doAssign(soldier, oA, buildReason(soldier, oA, '(tg-pair)'));
-          doAssign(soldier, oB, buildReason(soldier, oB, '(tg-pair)'));
-         } else { undoAssign(soldier.id, oA); }
-        }
-       }
+     /* שלב ג: מלא מושבים שנותרו מחיילים שלא בקבוצה */
+     for (let si = 0; si < daySeats.length; si++) {
+      if (usedSeats.has(si)) continue;
+      const seat = daySeats[si];
+      if (seat.slots.every(sl => sl.assigned.length >= sl.needed)) continue;
+      const pool = present.filter(s => !usedSoldiers.has(s.id) && canSeat(s, seat));
+      if (pool.length) {
+       doSeat(rank(pool, seat.slots[0])[0], seat, '(tg-fill)');
+       usedSeats.add(si);
       }
      }
     }
