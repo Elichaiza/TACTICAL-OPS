@@ -502,38 +502,83 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   for (const gn of groupNums) {
    const tg = timeGroups[gn];
    const days = [...new Set([...Object.keys(tg.patrols), ...Object.keys(tg.pairs)])].map(Number).sort((a,b) => a-b);
-   /* 3a. סיור — שבץ חיילים לכל הימים */
-   for (const day of days) {
-    const pSlots = tg.patrols[day] || [];
-    for (const slot of pSlots) {
-     while (slot.assigned.length < slot.needed) {
-      const pool = present.filter(s => canAssign(s, slot));
+   /* 3a. סיור — שבץ אותם חיילים לכל הימים */
+   const allPatrolSlots = days.flatMap(d => tg.patrols[d] || []);
+   if (allPatrolSlots.length > 0) {
+    const needed = allPatrolSlots[0].needed; /* כמה חיילים לכל סלוט סיור */
+    /* מצא חיילים שיכולים לעשות סיור בכל הימים של הקבוצה */
+    const patrolsByDay = days.map(d => (tg.patrols[d] || [])[0]).filter(Boolean);
+    for (let si = 0; si < needed; si++) {
+     /* מצא חייל שיכול לעשות את כל סלוטי הסיור */
+     const pool = present.filter(s => patrolsByDay.every(sl => canAssign(s, sl)));
+     if (!pool.length) break;
+     const pick = rank(pool, patrolsByDay[0])[0];
+     for (const sl of patrolsByDay) {
+      if (sl.assigned.length < sl.needed) {
+       doAssign(pick, sl, buildReason(pick, sl, '(tg-patrol)'));
+      }
+     }
+    }
+    /* מלא סלוטים שנשארו בודדים */
+    for (const sl of allPatrolSlots) {
+     while (sl.assigned.length < sl.needed) {
+      const pool = present.filter(s => canAssign(s, sl));
       if (!pool.length) break;
-      const pick = rank(pool, slot)[0];
-      doAssign(pick, slot, buildReason(pick, slot, '(tg-patrol)'));
+      doAssign(rank(pool, sl)[0], sl, buildReason(rank(pool, sl)[0], sl, '(tg-patrol)'));
      }
     }
    }
-   /* 3b. זוגות רגילים — שבץ כל חייל לזוג שלם (8ש') */
+   /* 3b. זוגות רגילים — שבץ אותו חייל לזוג (8ש') בכל הימים */
+   /* אסוף את כל הזוגות מכל הימים לפי משימה */
+   const missionPairs = {}; /* missionId -> [{slA, slB, day}] */
    for (const day of days) {
     const dayPairs = tg.pairs[day] || {};
     for (const mId of Object.keys(dayPairs)) {
      const mSlots = dayPairs[mId].sort((a, b) => a.startAbs - b.startAbs);
      if (mSlots.length < 2) continue;
-     const slA = mSlots[0], slB = mSlots[1];
-     while (slA.assigned.length < slA.needed && slB.assigned.length < slB.needed) {
-      const pool = present.filter(s => canAssign(s, slA));
-      let pick = null;
-      for (const c of rank(pool, slA)) {
-       doAssign(c, slA, '');
-       if (canAssign(c, slB)) {
-        undoAssign(c.id, slA);
-        pick = c; break;
-       } else { undoAssign(c.id, slA); }
+     if (!missionPairs[mId]) missionPairs[mId] = [];
+     missionPairs[mId].push({ slA: mSlots[0], slB: mSlots[1], day });
+    }
+   }
+   for (const mId of Object.keys(missionPairs)) {
+    const pairDays = missionPairs[mId]; /* array of {slA, slB, day} for each day */
+    const needed = pairDays[0].slA.needed;
+    for (let si = 0; si < needed; si++) {
+     /* מצא חייל שיכול לעשות את הזוג בכל הימים */
+     const allSlA = pairDays.map(p => p.slA);
+     const allSlB = pairDays.map(p => p.slB);
+     const pool = present.filter(s => {
+      for (let i = 0; i < pairDays.length; i++) {
+       if (!canAssign(s, allSlA[i])) return false;
+       /* בדוק גם slB אחרי שיבוץ זמני ל-slA */
       }
-      if (!pick) break;
-      doAssign(pick, slA, buildReason(pick, slA, '(tg-pair)'));
-      doAssign(pick, slB, buildReason(pick, slB, '(tg-pair)'));
+      return true;
+     });
+     if (!pool.length) break;
+     /* מצא חייל שיכול לעשות את כל הזוגות */
+     let pick = null;
+     for (const c of rank(pool, allSlA[0])) {
+      let allOk = true;
+      for (let i = 0; i < pairDays.length; i++) {
+       doAssign(c, allSlA[i], '');
+       if (!canAssign(c, allSlB[i])) { allOk = false; }
+       if (!allOk) {
+        for (let j = i; j >= 0; j--) undoAssign(c.id, allSlA[j]);
+        break;
+       }
+       doAssign(c, allSlB[i], '');
+      }
+      if (allOk) {
+       for (let i = pairDays.length - 1; i >= 0; i--) {
+        undoAssign(c.id, allSlB[i]); undoAssign(c.id, allSlA[i]);
+       }
+       pick = c; break;
+      }
+     }
+     if (!pick) break;
+     for (const p of pairDays) {
+      doAssign(pick, p.slA, buildReason(pick, p.slA, '(tg-pair)'));
+      doAssign(pick, p.slB, buildReason(pick, p.slB, '(tg-pair)'));
      }
     }
    }
