@@ -490,11 +490,11 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
     if (!byMission[sl.missionId]) byMission[sl.missionId] = [];
     byMission[sl.missionId].push(sl);
    }
-   /* סדר עיבוד: סיור (מיוחדים) קודם, אח"כ רגילים */
+   /* סדר עיבוד: רגילים (זוגות) קודם, אח"כ סיור — כי זוגות יותר מצומצמים בין ימים */
    const missionIds = Object.keys(byMission).sort((a, b) => {
-    const hA = Math.max(...byMission[a].map(s => s.hardness));
-    const hB = Math.max(...byMission[b].map(s => s.hardness));
-    return hB - hA;
+    const durA = Math.max(...byMission[a].map(s => s.dur));
+    const durB = Math.max(...byMission[b].map(s => s.dur));
+    return durA - durB; /* משימות קצרות (4ש' = זוגות) קודם */
    });
    for (const mId of missionIds) {
     const mSlots = byMission[mId].sort((a, b) => a.startAbs - b.startAbs);
