@@ -527,18 +527,8 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       for (const c of rank(pool, slA)) {
        doAssign(c, slA, '');
        if (canAssign(c, slB)) {
-        doAssign(c, slB, '');
-        let ok = true;
-        for (const other of allSlots) {
-         if (other === slA || other === slB || other.assigned.length >= other.needed) continue;
-         const need = other.needed - other.assigned.length;
-         let cnt = 0;
-         for (const s of present) { if (canAssign(s, other) && ++cnt >= need) break; }
-         if (cnt < need) { ok = false; break; }
-        }
-        undoAssign(c.id, slB);
         undoAssign(c.id, slA);
-        if (ok) { pick = c; break; }
+        pick = c; break;
        } else { undoAssign(c.id, slA); }
       }
       if (!pick) break;
