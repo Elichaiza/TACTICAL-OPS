@@ -509,21 +509,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      while (slot.assigned.length < slot.needed) {
       const pool = present.filter(s => canAssign(s, slot));
       if (!pool.length) break;
-      let pick = null;
-      for (const c of rank(pool, slot)) {
-       doAssign(c, slot, '');
-       let ok = true;
-       for (const other of allSlots) {
-        if (other === slot || other.assigned.length >= other.needed) continue;
-        const need = other.needed - other.assigned.length;
-        let cnt = 0;
-        for (const s of present) { if (canAssign(s, other) && ++cnt >= need) break; }
-        if (cnt < need) { ok = false; break; }
-       }
-       undoAssign(c.id, slot);
-       if (ok) { pick = c; break; }
-      }
-      if (!pick) pick = rank(pool, slot)[0];
+      const pick = rank(pool, slot)[0];
       doAssign(pick, slot, buildReason(pick, slot, '(tg-patrol)'));
      }
     }
