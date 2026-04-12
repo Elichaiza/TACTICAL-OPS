@@ -1099,6 +1099,27 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  _rankRng = null;
  /* שחזר את התוצאה הטובה ביותר */
  if (bestResult) restoreSnapshot(bestResult);
+ /* ── DEBUG: verify mission variety ── */
+ {
+  const sm = {};
+  for (const sl of allSlots) {
+   for (const a of sl.assigned) {
+    if (!sm[a.id]) sm[a.id] = { name: a.name, days: {} };
+    if (!sm[a.id].days[sl.dayNum]) sm[a.id].days[sl.dayNum] = new Set();
+    sm[a.id].days[sl.dayNum].add(sl.missionName);
+   }
+  }
+  const L = ['=== MISSION VARIETY PER SOLDIER ==='];
+  const ids = present.map(s => s.id);
+  for (const id of ids) {
+   const info = sm[id]; if (!info) continue;
+   const ds = Object.keys(info.days).sort((a,b)=>a-b).map(d=>`יום${d}:[${[...info.days[d]].join(',')}]`);
+   const allM = new Set(); Object.values(info.days).forEach(s=>s.forEach(m=>allM.add(m)));
+   L.push(`${info.name}: ${ds.join(' | ')} → missions:${allM.size} | hours:${state[id].totalMins/60}h`);
+  }
+  L.push(`=== unfilled=${allSlots.filter(s=>s.assigned.length<s.needed).length}, spread=${Math.max(...ids.map(id=>state[id].totalMins))-Math.min(...ids.map(id=>state[id].totalMins))}min ===`);
+  console.log(L.join('\n'));
+ }
  /* ── 6. הרכב תוצאות ─────────────────────────────────────── */
  const resultMap = {};
  missions.forEach(m => {
