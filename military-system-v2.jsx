@@ -562,6 +562,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       grpSoldiers.push(pick);
       prevHist[pick.id] = [{ missionId: seat.missionId, type: seat.type }];
      }
+     console.log(`[G${gn} D${day}] assigned ${grpSoldiers.length} soldiers: ${grpSoldiers.map(s=>`${s.name}(${prevHist[s.id][0].type})`).join(', ')}`);
     } else {
      /* ── ימים 2+: רוטציה עם מקסימום גיוון (סיור↔רגיל + משימות שונות) ── */
      /* ציון גיוון: כמה שונה מושב יעד מכל הימים הקודמים */
