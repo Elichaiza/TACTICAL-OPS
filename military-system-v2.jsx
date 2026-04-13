@@ -664,6 +664,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
     }
    }
   }
+  if (typeof window !== 'undefined') window.__pairedDebug = _dbg.join('\n');
  }
  function runGreedy(strategyNum) {
   let round = strategyNum * 7; /* offset שונה לכל אסטרטגיה */
