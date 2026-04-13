@@ -532,32 +532,43 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
     if (sl.assignedIds.has(soldierId))
      undoAssign(soldierId, sl);
   }
-  /* forward-check: אחרי שיבוץ ניסיוני, ודא שכל הסלוטים שנותרו ניתנים למילוי */
-  /* בודק ברמת סלוט: מספר מועמדים ייחודיים >= מספר מקומות חסרים */
+  /* forward-check: אחרי שיבוץ ניסיוני, ודא שכל המושבים שנותרו ניתנים למילוי */
+  /* בודק ברמת מושב (canSeat) — חשוב כי pair דורש ששני הסלוטים יתאימו לאותו חייל */
   function forwardCheck(daySeats, usedSeats, usedSoldiers, pool) {
-   /* 1. אסוף סלוטים שעדיין צריכים מילוי */
-   const slotNeeds = new Map();
+   /* 1. אסוף מושבים שנותרו */
+   const remaining = [];
    for (let si = 0; si < daySeats.length; si++) {
     if (usedSeats.has(si)) continue;
-    for (const sl of daySeats[si].slots) {
-     const rem = sl.needed - sl.assigned.length;
-     if (rem > 0) {
-      const key = sl.missionId + '__' + sl.shiftIdx;
-      if (!slotNeeds.has(key) || slotNeeds.get(key).needed < rem)
-       slotNeeds.set(key, { slot: sl, needed: rem });
-     }
-    }
+    const seat = daySeats[si];
+    if (seat.slots.every(sl => sl.assigned.length >= sl.needed)) continue;
+    remaining.push(seat);
    }
-   /* 2. לכל סלוט, ספור מועמדים ייחודיים שיכולים להיכנס */
-   for (const [, { slot, needed }] of slotNeeds) {
+   if (!remaining.length) return true;
+   /* 2. קבץ מושבים לפי סלוטים משותפים (למשל 3 מושבי סיור חולקים אותו סלוט) */
+   const groups = {};
+   for (const seat of remaining) {
+    const key = seat.slots.map(sl => sl.missionId + '__' + sl.shiftIdx).join('||');
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(seat);
+   }
+   /* 3. לכל קבוצה: ספור מועמדים ייחודיים שעוברים canSeat. חייב >= מספר מושבים */
+   const avail = pool.filter(s => !usedSoldiers.has(s.id));
+   for (const seats of Object.values(groups)) {
     let count = 0;
-    for (const s of pool) {
-     if (usedSoldiers.has(s.id)) continue;
-     if (canAssign(s, slot)) count++;
-     if (count >= needed) break;
+    for (const s of avail) {
+     if (canSeat(s, seats[0])) count++;
+     if (count >= seats.length) break;
     }
-    if (count < needed) return false;
+    if (count < seats.length) return false;
    }
+   /* 4. בדוק שסך המועמדים הייחודיים >= סך המושבים שנותרו */
+   const allCandIds = new Set();
+   for (const seat of remaining) {
+    for (const s of avail) {
+     if (canSeat(s, seat)) allCandIds.add(s.id);
+    }
+   }
+   if (allCandIds.size < remaining.length) return false;
    return true;
   }
   /* ── 3. עבד כל קבוצת-זמן: מצומצמת → גמישה ── */
