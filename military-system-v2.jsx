@@ -614,6 +614,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       if (b.s.hardness !== a.s.hardness) return b.s.hardness - a.s.hardness;
       return a.cands - b.cands;
      });
+     console.log(`  [D${day}] seatOrder: ${seatOrder.map(x => `${x.s.type[0]}:${x.s.missionName.substring(0,4)}(h=${x.s.hardness},c=${x.cands})`).join(', ')}`);
      for (const { s: seat, i: si } of seatOrder) {
       if (usedSeats.has(si)) continue;
       if (seat.slots.every(sl => sl.assigned.length >= sl.needed)) continue;
@@ -628,6 +629,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       const extPool = present.filter(s =>
        !usedSoldiers.has(s.id) && !grpSoldiers.some(g => g.id === s.id) && canSeat(s, seat));
       const candidates = [...grpPool, ...extPool];
+      console.log(`  [D${day}] seat ${seat.type}:${seat.missionName.substring(0,6)} → grpPool=${grpPool.length}(${grpPool.map(s=>s.name.substring(0,4)+'v'+vScore(s.id,seat)).join(',')}) ext=${extPool.length} total=${candidates.length}`);
       let assigned = false;
       for (const pick of candidates) {
        const vs = vScore(pick.id, seat);
@@ -638,9 +640,11 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
         if (!prevHist[pick.id]) prevHist[pick.id] = [];
         prevHist[pick.id].push({ missionId: seat.missionId, type: seat.type });
         assigned = true;
+        console.log(`    → assigned ${pick.name.substring(0,6)} (v=${vs}) FC=pass`);
         break;
        }
        /* rollback — מועמד זה יוצר dead-end */
+       console.log(`    → tried ${pick.name.substring(0,6)} (v=${vs}) FC=FAIL, rollback`);
        undoSeat(pick.id, seat);
        usedSeats.delete(si);
        usedSoldiers.delete(pick.id);
