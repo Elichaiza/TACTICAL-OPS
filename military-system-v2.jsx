@@ -561,8 +561,9 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    return true;
   }
   /* ── 3. עבד כל קבוצת-זמן: מצומצמת → גמישה ── */
+  const _dbg = []; const _d = s => _dbg.push(s);
   const groupNums = Object.keys(tgMap).map(Number).sort((a, b) => b - a);
-  console.log(`[paired] groups: ${groupNums.join(',')}`);
+  _d(`groups: ${groupNums.join(',')}`);
   for (const gn of groupNums) {
    const dayMap = tgMap[gn];
    const days = Object.keys(dayMap).map(Number).sort((a, b) => a - b);
@@ -570,7 +571,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
    const seatsPerDay = {};
    for (const d of days) seatsPerDay[d] = buildSeats(dayMap[d]);
    if (!seatsPerDay[days[0]]?.length) continue;
-   console.log(`[paired] G${gn}: days=${days.join(',')}, seats/day: ${days.map(d=>`D${d}=${seatsPerDay[d].length}(${seatsPerDay[d].map(s=>s.type[0]+':'+s.missionName.substring(0,4)).join(',')})`).join(' | ')}`);
+   _d(`G${gn}: days=${days.join(',')}, seats/day: ${days.map(d=>`D${d}=${seatsPerDay[d].length}(${seatsPerDay[d].map(s=>s.type[0]+':'+s.missionName.substring(0,4)).join(',')})`).join(' | ')}`);
    const prevHist = {};
    const grpSoldiers = [];
    for (let di = 0; di < days.length; di++) {
