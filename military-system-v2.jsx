@@ -645,7 +645,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
         break;
        }
        /* rollback — מועמד זה יוצר dead-end */
-       console.log(`    → tried ${pick.name.substring(0,6)} (v=${vs}) FC=FAIL, rollback`);
+       _d(`    → tried ${pick.name.substring(0,6)} (v=${vs}) FC=FAIL, rollback`);
        undoSeat(pick.id, seat);
        usedSeats.delete(si);
        usedSoldiers.delete(pick.id);
