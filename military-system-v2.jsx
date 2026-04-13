@@ -1123,9 +1123,11 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
   runDeepSwap();
   runEqualization();
   const snap = saveFullSnapshot();
+  console.log(`[attempt ${attempt}] unfilled=${snap.unfilled} spread=${snap.spread} strategy=${attempt<=1?'paired':'greedy'}`);
   if (!bestResult || snap.unfilled < bestResult.unfilled ||
       (snap.unfilled === bestResult.unfilled && snap.spread < bestResult.spread)) {
    bestResult = snap;
+   console.log(`  → NEW BEST`);
   }
   if (snap.unfilled === 0 && snap.spread <= 240) break; /* מושלם + שוויוני! */
   if (Date.now() - _startTime > TIME_LIMIT) break; /* timeout */
