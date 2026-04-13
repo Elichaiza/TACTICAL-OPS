@@ -615,7 +615,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       if (b.s.hardness !== a.s.hardness) return b.s.hardness - a.s.hardness;
       return a.cands - b.cands;
      });
-     console.log(`  [D${day}] seatOrder: ${seatOrder.map(x => `${x.s.type[0]}:${x.s.missionName.substring(0,4)}(h=${x.s.hardness},c=${x.cands})`).join(', ')}`);
+     _d(`  [D${day}] seatOrder: ${seatOrder.map(x => `${x.s.type[0]}:${x.s.missionName.substring(0,4)}(h=${x.s.hardness},c=${x.cands})`).join(', ')}`);
      for (const { s: seat, i: si } of seatOrder) {
       if (usedSeats.has(si)) continue;
       if (seat.slots.every(sl => sl.assigned.length >= sl.needed)) continue;
