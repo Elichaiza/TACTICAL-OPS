@@ -641,7 +641,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
         if (!prevHist[pick.id]) prevHist[pick.id] = [];
         prevHist[pick.id].push({ missionId: seat.missionId, type: seat.type });
         assigned = true;
-        console.log(`    → assigned ${pick.name.substring(0,6)} (v=${vs}) FC=pass`);
+        _d(`    → assigned ${pick.name.substring(0,6)} (v=${vs}) FC=pass`);
         break;
        }
        /* rollback — מועמד זה יוצר dead-end */
