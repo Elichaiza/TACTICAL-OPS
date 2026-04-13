@@ -606,10 +606,10 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       return v;
      }
      const usedSeats = new Set(), usedSoldiers = new Set();
-     const allCands = [...grpSoldiers, ...present.filter(s => !grpSoldiers.some(g => g.id === s.id))];
+     /* רק חיילי הקבוצה — כדי לא "לגנוב" חיילים מקבוצות אחרות */
      /* סדר מושבים: קשים קודם, אחר כך הכי מצומצמים */
      const seatOrder = daySeats.map((s, i) => {
-      const c = allCands.filter(sol => canSeat(sol, s)).length;
+      const c = grpSoldiers.filter(sol => canSeat(sol, s)).length;
       return { s, i, cands: c };
      }).sort((a, b) => {
       if (b.s.hardness !== a.s.hardness) return b.s.hardness - a.s.hardness;
@@ -619,25 +619,22 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
      for (const { s: seat, i: si } of seatOrder) {
       if (usedSeats.has(si)) continue;
       if (seat.slots.every(sl => sl.assigned.length >= sl.needed)) continue;
-      /* מועמדים: חיילי קבוצה (ממוינים לפי גיוון) ואז חיצוניים */
-      const grpPool = grpSoldiers.filter(s => !usedSoldiers.has(s.id) && canSeat(s, seat))
+      /* מועמדים: רק חיילי הקבוצה, ממוינים לפי גיוון */
+      const candidates = grpSoldiers.filter(s => !usedSoldiers.has(s.id) && canSeat(s, seat))
        .sort((a, b) => {
         const va = vScore(a.id, seat), vb = vScore(b.id, seat);
         if (va !== vb) return vb - va;
         const r = rank([a, b], seat.slots[0]);
         return r[0].id === a.id ? -1 : 1;
        });
-      const extPool = present.filter(s =>
-       !usedSoldiers.has(s.id) && !grpSoldiers.some(g => g.id === s.id) && canSeat(s, seat));
-      const candidates = [...grpPool, ...extPool];
-      _d(`  [D${day}] seat ${seat.type}:${seat.missionName.substring(0,6)} → grpPool=${grpPool.length}(${grpPool.map(s=>s.name.substring(0,4)+'v'+vScore(s.id,seat)).join(',')}) ext=${extPool.length} total=${candidates.length}`);
+      _d(`  [D${day}] seat ${seat.type}:${seat.missionName.substring(0,6)} → cands=${candidates.length}(${candidates.map(s=>s.name.substring(0,4)+'v'+vScore(s.id,seat)).join(',')})`);
       let assigned = false;
       for (const pick of candidates) {
        const vs = vScore(pick.id, seat);
        doSeat(pick, seat, vs > 0 ? '(tg-rotate)' : '(tg-same)');
        usedSeats.add(si);
        usedSoldiers.add(pick.id);
-       if (forwardCheck(daySeats, usedSeats, usedSoldiers, allCands)) {
+       if (forwardCheck(daySeats, usedSeats, usedSoldiers, grpSoldiers)) {
         if (!prevHist[pick.id]) prevHist[pick.id] = [];
         prevHist[pick.id].push({ missionId: seat.missionId, type: seat.type });
         assigned = true;
