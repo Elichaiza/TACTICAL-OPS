@@ -630,7 +630,7 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
       const extPool = present.filter(s =>
        !usedSoldiers.has(s.id) && !grpSoldiers.some(g => g.id === s.id) && canSeat(s, seat));
       const candidates = [...grpPool, ...extPool];
-      console.log(`  [D${day}] seat ${seat.type}:${seat.missionName.substring(0,6)} → grpPool=${grpPool.length}(${grpPool.map(s=>s.name.substring(0,4)+'v'+vScore(s.id,seat)).join(',')}) ext=${extPool.length} total=${candidates.length}`);
+      _d(`  [D${day}] seat ${seat.type}:${seat.missionName.substring(0,6)} → grpPool=${grpPool.length}(${grpPool.map(s=>s.name.substring(0,4)+'v'+vScore(s.id,seat)).join(',')}) ext=${extPool.length} total=${candidates.length}`);
       let assigned = false;
       for (const pick of candidates) {
        const vs = vScore(pick.id, seat);
