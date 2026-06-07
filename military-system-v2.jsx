@@ -1431,6 +1431,108 @@ function buildAssignmentV2(missions, soldiers, fullAtt, pinnedAssignments = {}) 
  return missions.map(m => resultMap[m.id]);
 }
 /* ===========================================================
+ BACKEND SOLVER (OR-Tools CP-SAT) — בניית בעיה + קריאה + מיפוי
+=========================================================== */
+function _toAbs(dateStr, timeStr) {
+ if (!dateStr) return 0;
+ const [y, m, d] = dateStr.split('-').map(Number);
+ const days = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(2000, 0, 1)) / 86400000);
+ return days * 1440 + timeToMins(timeStr || '00:00');
+}
+function _milDay(dateStr, timeStr) {
+ if (timeToMins(timeStr || '00:00') < 600) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const p = new Date(Date.UTC(y, m - 1, d) - 86400000);
+  return `${p.getUTCFullYear()}-${String(p.getUTCMonth()+1).padStart(2,'0')}-${String(p.getUTCDate()).padStart(2,'0')}`;
+ }
+ return dateStr;
+}
+/* בונה את בעיית ה-CSP לשליחה ל-backend — כולל זכאות פר-משמרת */
+function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {}) {
+ const slots = [];
+ const slotMeta = {}; // key -> {missionId, shiftIdx}
+ missions.forEach(mission => {
+  computeMissionShifts(mission).forEach((sh, si) => {
+   const key = `${mission.id}__${si}`;
+   const sAbs = _toAbs(sh.startDate, sh.start);
+   const eRaw = _toAbs(sh.endDate || sh.startDate, sh.end);
+   const eAbs = eRaw > sAbs ? eRaw : eRaw + 1440;
+   const reqCerts = mission.requiredCerts || [];
+   // זכאות: נוכח באותו יום + חלון שעות מכסה + הסמכות
+   const eligible = [];
+   for (const s of soldiers) {
+    const dayAtt = (fullAtt[sh.startDate] || {})[s.id];
+    if (getAttStatus(dayAtt) !== 'present') continue;
+    if (dayAtt && typeof dayAtt === 'object') {
+     const from = getAttField(dayAtt, 'from', '10:00');
+     const to   = getAttField(dayAtt, 'to',   '10:00');
+     if (from !== to) {
+      const base = _toAbs(sh.startDate, '00:00');
+      const fA = base + timeToMins(from);
+      let   tA = base + timeToMins(to);
+      if (tA <= fA) tA += 1440;
+      if (sAbs < fA || eAbs > tA) continue;
+     }
+    }
+    if (reqCerts.length && !reqCerts.every(c => s.certifications?.includes(c))) continue;
+    eligible.push(s.id);
+   }
+   slots.push({
+    key, missionId: mission.id, shiftIdx: si,
+    startAbs: sAbs, endAbs: eAbs, dur: eAbs - sAbs,
+    milDay: _milDay(sh.startDate, sh.start),
+    needed: mission.soldiersPerShift || 1,
+    minSpecial: mission.minSpecialRoles || 0,
+    mandatory: mission.mandatoryRoles || [],
+    eligible,
+   });
+   slotMeta[key] = { missionId: mission.id, shiftIdx: si };
+  });
+ });
+ const forced = [];
+ Object.entries(pinnedAssignments).forEach(([key, ids]) => {
+  (ids || []).forEach(sid => forced.push([key, sid]));
+ });
+ return {
+  soldiers: soldiers.map(s => ({ id: s.id, role: s.role })),
+  slots, forced,
+ };
+}
+/* קורא ל-backend ומחזיר { result | infeasible } */
+async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = {}) {
+ const problem = buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments);
+ const resp = await fetch('/api/solve', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(problem),
+ });
+ if (!resp.ok) throw new Error(`solver ${resp.status}`);
+ const data = await resp.json();
+ if (!data.feasible) return { feasible: false, reasons: data.reasons || [], error: data.error };
+ // מיפוי חזרה לפורמט התוצאה של ה-app
+ const byId = {};
+ soldiers.forEach(s => { byId[s.id] = s; });
+ const resultMap = {};
+ missions.forEach(m => {
+  resultMap[m.id] = {
+   missionId: m.id, missionName: m.name,
+   shifts: computeMissionShifts(m).map((sh, si) => {
+    const ids = data.assignments[`${m.id}__${si}`] || [];
+    const needed = m.soldiersPerShift || 1;
+    return {
+     ...sh,
+     soldierIds: ids,
+     soldierNames: ids.map(id => byId[id]?.name || id),
+     soldierDetails: ids.map(id => ({ id, name: byId[id]?.name || id, role: byId[id]?.role || '' })),
+     needed, filled: ids.length >= needed,
+    };
+   }),
+  };
+ });
+ return { feasible: true, result: missions.map(m => resultMap[m.id]),
+          spread: data.spread, optimal: data.optimal, rotation: data.rotation };
+}
+/* ===========================================================
  ROOT APP
 =========================================================== */
 function AppInner() {
