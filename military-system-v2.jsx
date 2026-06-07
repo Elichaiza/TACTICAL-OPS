@@ -2881,7 +2881,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
                have: h.have, need: h.need,
                cause: CAUSE[h.cause] || 'לא ניתן למלא' };
      });
-     setFeasIssues(issues); setFeasSummary(out.summary || null); setShowWarning(true);
+     setFeasIssues(issues); setFeasSummary(out.summary || null); setWarnMode('infeasible'); setShowWarning(true);
     } else {
      notify('לא נמצא שיבוץ חוקי — בדוק דרישות המשימות', 'error');
     }
