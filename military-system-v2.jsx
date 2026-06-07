@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, Component } from "react";
 import { syncUsersToDb, syncDeploymentsToDb, loadUsersFromDb, loadDeploymentsFromDb } from './supabaseSync.js';
+import seedData from './seed-data.json';
 /* ── Error Boundary — תופס שגיאות render ── */
 class ErrorBoundary extends Component {
  constructor(props) { super(props); this.state = { error: null }; }
