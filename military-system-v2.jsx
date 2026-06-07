@@ -1175,6 +1175,201 @@ function buildAssignment(missions, soldiers, attendanceToday, missionHistory = {
  });
  return missions.map(m => resultMap[m.id]); }
 /* ===========================================================
+ FEASIBILITY CHECK
+=========================================================== */
+function feasibilityCheck(missions, soldiers, fullAtt) {
+ const issues = [];
+ missions.forEach(mission => {
+  computeMissionShifts(mission).forEach((sh, si) => {
+   const date = sh.startDate;
+   const dayAtt = fullAtt[date] || {};
+   const hasData = soldiers.some(s => dayAtt[s.id]);
+   if (!hasData) {
+    issues.push({ type: 'no_attendance', mission: mission.name, date, shift: si + 1 });
+    return;
+   }
+   const present = soldiers.filter(s => getAttStatus(dayAtt[s.id]) === 'present');
+   const needed = mission.soldiersPerShift || 1;
+   if (present.length < needed)
+    issues.push({ type: 'few_soldiers', mission: mission.name, date, shift: si + 1, have: present.length, need: needed });
+   for (const cert of (mission.requiredCerts || []))
+    if (!present.some(s => s.certifications?.includes(cert)))
+     issues.push({ type: 'missing_cert', mission: mission.name, date, shift: si + 1, item: CERT_LABELS[cert] || cert });
+   for (const role of (mission.mandatoryRoles || []))
+    if (!present.some(s => s.role === role))
+     issues.push({ type: 'missing_role', mission: mission.name, date, shift: si + 1, item: role });
+  });
+ });
+ return issues;
+}
+/* ===========================================================
+ BUILD ASSIGNMENT V2
+=========================================================== */
+function buildAssignmentV2(missions, soldiers, fullAtt, pinnedAssignments = {}) {
+ const MIN_REST  = 480;
+ const MAX_DAILY = 480;
+ /* דקות מוחלטות מ-2000-01-01 — ציר זמן אוניברסלי */
+ function toAbs(dateStr, timeStr) {
+  if (!dateStr) return 0;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const days = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(2000, 0, 1)) / 86400000);
+  return days * 1440 + timeToMins(timeStr || '00:00');
+ }
+ /* יממה צבאית: מ-10:00 עד 10:00 למחרת */
+ function milDayKey(dateStr, timeStr) {
+  if (timeToMins(timeStr || '00:00') < 600) {
+   const [y, m, d] = dateStr.split('-').map(Number);
+   const p = new Date(Date.UTC(y, m - 1, d) - 86400000);
+   return `${p.getUTCFullYear()}-${String(p.getUTCMonth()+1).padStart(2,'0')}-${String(p.getUTCDate()).padStart(2,'0')}`;
+  }
+  return dateStr;
+ }
+ /* בנה סלוטים עם ציר זמן אוניברסלי */
+ const allSlots = [];
+ missions.forEach((mission, mIdx) => {
+  computeMissionShifts(mission).forEach((sh, si) => {
+   const sAbs = toAbs(sh.startDate, sh.start);
+   const eAbsRaw = toAbs(sh.endDate || sh.startDate, sh.end);
+   const eAbs = eAbsRaw > sAbs ? eAbsRaw : eAbsRaw + 1440;
+   allSlots.push({
+    missionId: mission.id, missionName: mission.name, missionIdx: mIdx,
+    shiftIdx: si, startDate: sh.startDate, endDate: sh.endDate || sh.startDate,
+    start: sh.start, end: sh.end, dayNum: sh.dayNum, shiftOfDay: sh.shiftOfDay,
+    startAbs: sAbs, endAbs: eAbs, dur: eAbs - sAbs,
+    milDay: milDayKey(sh.startDate, sh.start),
+    needed: mission.soldiersPerShift || 1,
+    minSpecialRoles: mission.minSpecialRoles || 0,
+    mandatoryRoles: mission.mandatoryRoles || [],
+    requiredCerts: mission.requiredCerts || [],
+    assigned: [], assignedIds: new Set(),
+    pinIds: pinnedAssignments[`${mission.id}__${si}`] || [],
+   });
+  });
+ });
+ /* מצב חיילים */
+ const state = {};
+ soldiers.forEach((s, idx) => {
+  state[s.id] = { totalMins: 0, shiftCount: 0, busySlots: [], dailyMins: {}, lastMissionId: null, idx };
+ });
+ /* החל נעיצות */
+ allSlots.forEach(slot => {
+  slot.pinIds.forEach(sid => {
+   const soldier = soldiers.find(s => s.id === sid);
+   if (!soldier || slot.assignedIds.has(sid)) return;
+   slot.assigned.push({ id: sid, name: soldier.name, role: soldier.role, pinned: true, reason: '📌 נעול' });
+   slot.assignedIds.add(sid);
+   const st = state[sid];
+   if (st) {
+    st.totalMins += slot.dur; st.shiftCount++;
+    st.busySlots.push({ s: slot.startAbs, e: slot.endAbs });
+    st.dailyMins[slot.milDay] = (st.dailyMins[slot.milDay] || 0) + slot.dur;
+    st.lastMissionId = slot.missionId;
+   }
+  });
+ });
+ /* בדיקת זכאות לסלוט */
+ function canAssign(soldier, slot) {
+  const st = state[soldier.id];
+  if (slot.assignedIds.has(soldier.id)) return false;
+  /* נוכח ביום הספציפי של המשמרת */
+  const dayAtt = (fullAtt[slot.startDate] || {})[soldier.id];
+  if (getAttStatus(dayAtt) !== 'present') return false;
+  /* חלון שעות נוכחות */
+  if (dayAtt && typeof dayAtt === 'object') {
+   const from = getAttField(dayAtt, 'from', '10:00');
+   const to   = getAttField(dayAtt, 'to',   '10:00');
+   if (from !== to) {
+    const base = toAbs(slot.startDate, '00:00');
+    const fA   = base + timeToMins(from);
+    let   tA   = base + timeToMins(to);
+    if (tA <= fA) tA += 1440;
+    if (slot.startAbs < fA || slot.endAbs > tA) return false;
+   }
+  }
+  /* הסמכות */
+  if (slot.requiredCerts.length && !slot.requiredCerts.every(c => soldier.certifications?.includes(c))) return false;
+  /* אין חפיפה */
+  if (st.busySlots.some(b => b.s < slot.endAbs && slot.startAbs < b.e)) return false;
+  /* 8 שעות מנוחה */
+  for (const b of st.busySlots) {
+   const gap = b.s >= slot.endAbs ? b.s - slot.endAbs : slot.startAbs - b.e;
+   if (gap >= 0 && gap < MIN_REST) return false;
+  }
+  /* מקסימום 8 שעות ביממה (10:00–10:00) */
+  if ((st.dailyMins[slot.milDay] || 0) + slot.dur > MAX_DAILY) return false;
+  return true;
+ }
+ /* סינון לפי תפקיד חובה: אם יש תפקיד שלא שובץ ואין מקום — הגבל לבעלי אותו תפקיד */
+ function applyRoleFilter(pool, slot) {
+  const unmet = slot.mandatoryRoles.filter(r => !slot.assigned.some(a => a.role === r));
+  if (!unmet.length) return pool;
+  const remaining = slot.needed - slot.assigned.length;
+  if (remaining <= unmet.length) {
+   const strict = pool.filter(s => unmet.includes(s.role));
+   return strict.length ? strict : pool;
+  }
+  return pool;
+ }
+ /* דירוג: גיוון → פחות שעות → פחות משמרות → round-robin */
+ function rankCandidates(pool, slot) {
+  return pool.slice().sort((a, b) => {
+   const aV = state[a.id].lastMissionId === slot.missionId ? 1 : 0;
+   const bV = state[b.id].lastMissionId === slot.missionId ? 1 : 0;
+   if (aV !== bV) return aV - bV;
+   if (state[a.id].totalMins !== state[b.id].totalMins) return state[a.id].totalMins - state[b.id].totalMins;
+   if (state[a.id].shiftCount !== state[b.id].shiftCount) return state[a.id].shiftCount - state[b.id].shiftCount;
+   return state[a.id].idx - state[b.id].idx;
+  });
+ }
+ function doAssignV2(soldier, slot) {
+  const st = state[soldier.id];
+  const varied = st.lastMissionId !== null && st.lastMissionId !== slot.missionId;
+  slot.assigned.push({
+   id: soldier.id, name: soldier.name, role: soldier.role,
+   reason: `שעות: ${fmtMins(st.totalMins)} · שיבוץ #${st.shiftCount + 1}${varied ? ' · 🔄' : ''}`,
+  });
+  slot.assignedIds.add(soldier.id);
+  st.totalMins += slot.dur; st.shiftCount++;
+  st.busySlots.push({ s: slot.startAbs, e: slot.endAbs });
+  st.dailyMins[slot.milDay] = (st.dailyMins[slot.milDay] || 0) + slot.dur;
+  st.lastMissionId = slot.missionId;
+ }
+ /* לולאה ראשית: הסלוט המצומצם ביותר קודם */
+ let progress = true;
+ while (progress) {
+  progress = false;
+  const open = allSlots.filter(sl => sl.assigned.length < sl.needed);
+  if (!open.length) break;
+  open.forEach(sl => { sl._cands = soldiers.filter(s => canAssign(s, sl)); });
+  const viable = open.filter(sl => sl._cands.length > 0);
+  if (!viable.length) break;
+  viable.sort((a, b) => a._cands.length !== b._cands.length ? a._cands.length - b._cands.length : a.startAbs - b.startAbs);
+  const slot = viable[0];
+  doAssignV2(rankCandidates(applyRoleFilter(slot._cands, slot), slot)[0], slot);
+  progress = true;
+ }
+ /* הרכב תוצאות */
+ const resultMap = {};
+ missions.forEach(m => {
+  resultMap[m.id] = {
+   missionId: m.id, missionName: m.name,
+   shifts: computeMissionShifts(m).map(sh => ({
+    ...sh, soldierIds: [], soldierNames: [], soldierDetails: [],
+    needed: m.soldiersPerShift || 1, filled: false,
+   })),
+  };
+ });
+ allSlots.forEach(slot => {
+  const mRes = resultMap[slot.missionId]; if (!mRes) return;
+  const sh   = mRes.shifts[slot.shiftIdx]; if (!sh)   return;
+  sh.soldierIds     = slot.assigned.map(a => a.id);
+  sh.soldierNames   = slot.assigned.map(a => a.name);
+  sh.soldierDetails = slot.assigned;
+  sh.filled         = slot.assigned.length >= slot.needed;
+ });
+ return missions.map(m => resultMap[m.id]);
+}
+/* ===========================================================
  ROOT APP
 =========================================================== */
 function AppInner() {
