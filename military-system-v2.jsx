@@ -3290,18 +3290,20 @@ function AssignmentTab({ dep, updateDep, notify }) {
        ))}
       </div>
       <div style={{color:"#64748b",fontSize:13,marginBottom:16}}>
-       {feasPartial
-        ? "אפשר להציג את השיבוץ החלקי (כל מה שכן ניתן למלא חוקית) ולהשלים ידנית, או לבטל ולתקן את הנתונים."
-        : "תקן את הנתונים ונסה שוב."}
+       בחר כיצד להמשיך:
       </div>
-      <div style={{display:"flex",gap:10}}>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
        {feasPartial && (
-        <button onClick={()=>{ setResult(feasPartial); setShowWarning(false); notify('מוצג שיבוץ חלקי — השלם ידנית את החסר','warn'); }}
-         style={{...S.btnPrimary,flex:1}}>הצג שיבוץ חלקי</button>
+        <button onClick={()=>{ setResult(feasPartial); setForceViolations(null); setShowWarning(false); notify('מוצג שיבוץ חלקי — השלם ידנית את החסר','warn'); }}
+         style={{...S.btnPrimary,background:'#15803d'}}>
+         ✓ שיבוץ חלקי חוקי <span style={{fontSize:11,opacity:0.85}}>(רק מה שאפשר תחת החוקים — בלי חריגות)</span>
+        </button>
        )}
-       <button onClick={()=>setShowWarning(false)} style={{...(feasPartial?S.btnGhost:S.btnPrimary),flex:1}}>
-        {feasPartial ? 'בטל' : 'הבנתי'}
+       <button onClick={runForce}
+        style={{...S.btnPrimary,background:'#b45309'}}>
+        ⚠ מלא הכל למרות חריגה <span style={{fontSize:11,opacity:0.85}}>(כל המשמרות יאוישו — חלק יחרגו ממנוחה/מכסה)</span>
        </button>
+       <button onClick={()=>setShowWarning(false)} style={{...S.btnGhost}}>בטל</button>
       </div>
      </div>
     </div>
