@@ -4,6 +4,7 @@
 # ============================================================
 from http.server import BaseHTTPRequestHandler
 from collections import defaultdict
+from math import gcd, ceil
 import json
 
 from ortools.sat.python import cp_model
@@ -22,7 +23,9 @@ def _conflict(a, b):
     return gap < MIN_REST
 
 
-def solve(problem):
+def _attempt(problem, use_cap=True, time_limit=9.0):
+    """ניסיון פתרון יחיד. use_cap=True מוסיף תקרת שעות הדוקה לאיזון מהיר.
+    מחזיר: dict פתרון | {"structural": reasons} | None (אין פתרון בזמן/עם תקרה)."""
     soldiers = problem["soldiers"]   # [{id, role}]
     slots = problem["slots"]         # ראה build בצד הלקוח
     role_of = {s["id"]: s["role"] for s in soldiers}
@@ -91,9 +94,9 @@ def solve(problem):
             if terms:
                 model.Add(sum(terms) <= MAX_DAILY)
 
-    # אם זוהתה אי-היתכנות ודאית — החזר מיד עם הסיבות
+    # אם זוהתה אי-היתכנות מבנית ודאית — החזר מיד (לא תלוי בתקרה)
     if infeasible_reasons:
-        return {"feasible": False, "reasons": infeasible_reasons}
+        return {"structural": infeasible_reasons}
 
     # ── עומס שעות לכל חייל ──
     total_demand = sum(sl["dur"] * sl["needed"] for sl in slots)
@@ -107,6 +110,22 @@ def solve(problem):
         lv = model.NewIntVar(0, max_load, f"load_{sid}")
         model.Add(lv == (sum(terms) if terms else 0))
         load[sid] = lv
+
+    # ── תקרת שעות הדוקה (use_cap) — מאיצה דרמטית את האיזון ──
+    # cap = ⌈ממוצע⌉ מעוגל מעלה לאורך-משמרת. עם תקרה זו האופטימיזציה
+    # האיטית הופכת לבדיקת היתכנות מהירה (כל אחד נדחף קרוב לממוצע).
+    if use_cap:
+        working = [s["id"] for s in soldiers
+                   if any((sl["key"], s["id"]) in x for sl in slots)]
+        nw = len(working) or 1
+        gran = 0
+        for sl in slots:
+            gran = gcd(gran, sl["dur"])
+        gran = gran or 1
+        avg = total_demand / nw
+        cap = ceil(avg / gran) * gran
+        for sid in working:
+            model.Add(load[sid] <= cap)
 
     # ── מטרה רכה #1: איזון שעות — מזעור סכום ריבועי העומסים ──
     # סך השעות קבוע (איוש מלא) ⇒ מזעור Σload² שקול למזעור השונות = פיזור הכי שווה.
@@ -139,7 +158,7 @@ def solve(problem):
     model.Minimize(sum_sq * 10000 + rot)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 9.0   # מתחת למגבלת Vercel (10ש')
+    solver.parameters.max_time_in_seconds = time_limit
     solver.parameters.num_search_workers = 8
     status = solver.Solve(model)
 
@@ -159,8 +178,22 @@ def solve(problem):
             "spread": spread,
             "rotation": solver.Value(rot),
         }
+    return None  # אין פתרון (אולי בגלל התקרה) — המתזמן ינסה בלי תקרה
 
-    # ── אי-היתכנות: הרץ מודל רגוע למצוא אילו משמרות לא ניתנות למילוי ──
+
+def solve(problem):
+    """מתזמן: ניסיון עם תקרה הדוקה (מהיר ומאוזן), ואם נכשל — בלי תקרה, ואם
+    גם זה נכשל — אבחון אילו משמרות לא ניתנות למילוי."""
+    capped = _attempt(problem, use_cap=True, time_limit=6.0)
+    if isinstance(capped, dict) and capped.get("structural"):
+        return {"feasible": False, "reasons": capped["structural"]}
+    if isinstance(capped, dict) and capped.get("feasible"):
+        return capped
+    # התקרה אולי גרמה לאי-היתכנות — נסה בלי תקרה
+    uncapped = _attempt(problem, use_cap=False, time_limit=3.0)
+    if isinstance(uncapped, dict) and uncapped.get("feasible"):
+        return uncapped
+    # באמת אין פתרון — אבחן אילו משמרות חסרות
     return _relaxed_diagnose(problem)
 
 
