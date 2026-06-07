@@ -3252,19 +3252,20 @@ function AssignmentTab({ dep, updateDep, notify }) {
         </div>
        ))}
       </div>
-      {warnMode==="infeasible" ? (
-       <div style={{display:"flex",gap:10}}>
-        <button onClick={()=>setShowWarning(false)} style={{...S.btnPrimary,flex:1}}>הבנתי</button>
-       </div>
-      ) : (
-       <>
-        <div style={{color:"#64748b",fontSize:13,marginBottom:20}}>האם להמשיך בשיבוץ בכל זאת? ייתכן שחלק מהמשמרות לא יתמלאו.</div>
-        <div style={{display:"flex",gap:10}}>
-         <button onClick={()=>run(true)} style={{...S.btnPrimary,flex:1}}>המשך בכל זאת</button>
-         <button onClick={()=>setShowWarning(false)} style={{...S.btnGhost,flex:1}}>בטל</button>
-        </div>
-       </>
-      )}
+      <div style={{color:"#64748b",fontSize:13,marginBottom:16}}>
+       {feasPartial
+        ? "אפשר להציג את השיבוץ החלקי (כל מה שכן ניתן למלא חוקית) ולהשלים ידנית, או לבטל ולתקן את הנתונים."
+        : "תקן את הנתונים ונסה שוב."}
+      </div>
+      <div style={{display:"flex",gap:10}}>
+       {feasPartial && (
+        <button onClick={()=>{ setResult(feasPartial); setShowWarning(false); notify('מוצג שיבוץ חלקי — השלם ידנית את החסר','warn'); }}
+         style={{...S.btnPrimary,flex:1}}>הצג שיבוץ חלקי</button>
+       )}
+       <button onClick={()=>setShowWarning(false)} style={{...(feasPartial?S.btnGhost:S.btnPrimary),flex:1}}>
+        {feasPartial ? 'בטל' : 'הבנתי'}
+       </button>
+      </div>
      </div>
     </div>
    )}
