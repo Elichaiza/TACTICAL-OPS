@@ -1348,6 +1348,55 @@ function buildAssignmentV2(missions, soldiers, fullAtt, pinnedAssignments = {}) 
   doAssignV2(rankCandidates(applyRoleFilter(slot._cands, slot), slot)[0], slot);
   progress = true;
  }
+ /* איזון שעות: העבר משמרות מחיילים כבדים לקלים */
+ function undoAssignV2(soldierId, slot) {
+  const idx = slot.assigned.findIndex(a => a.id === soldierId);
+  if (idx < 0) return;
+  slot.assigned.splice(idx, 1);
+  slot.assignedIds.delete(soldierId);
+  const st = state[soldierId];
+  if (!st) return;
+  st.totalMins = Math.max(0, st.totalMins - slot.dur);
+  st.shiftCount = Math.max(0, st.shiftCount - 1);
+  st.busySlots = st.busySlots.filter(b => !(b.s === slot.startAbs && b.e === slot.endAbs));
+  st.dailyMins[slot.milDay] = Math.max(0, (st.dailyMins[slot.milDay] || 0) - slot.dur);
+ }
+ for (let eq = 0; eq < 300; eq++) {
+  const mins = soldiers.map(s => state[s.id]?.totalMins ?? 0);
+  const maxM = Math.max(...mins), minM = Math.min(...mins);
+  if (maxM - minM <= 0) break;
+  const avg = mins.reduce((a,b)=>a+b,0) / mins.length;
+  const heavy = soldiers.filter(s=>state[s.id]&&state[s.id].totalMins>avg).sort((a,b)=>state[b.id].totalMins-state[a.id].totalMins);
+  const light  = soldiers.filter(s=>state[s.id]&&state[s.id].totalMins<avg).sort((a,b)=>state[a.id].totalMins-state[b.id].totalMins);
+  if (!heavy.length || !light.length) break;
+  let swapped = false;
+  outer: for (const h of heavy) {
+   for (const l of light) {
+    const diff = state[h.id].totalMins - state[l.id].totalMins;
+    if (diff <= 0) continue;
+    for (const slot of allSlots) {
+     if (!slot.assignedIds.has(h.id) || slot.assignedIds.has(l.id)) continue;
+     const hEntry = slot.assigned.find(a => a.id === h.id);
+     if (hEntry?.pinned) continue;
+     if (slot.dur > diff) continue;
+     const hReason = hEntry.reason;
+     undoAssignV2(h.id, slot);
+     if (canAssign(l, slot)) {
+      doAssignV2(l, slot);
+      swapped = true; break outer;
+     }
+     /* שחזור */
+     slot.assigned.push({ id:h.id, name:h.name, role:h.role, reason:hReason });
+     slot.assignedIds.add(h.id);
+     const st = state[h.id];
+     st.totalMins += slot.dur; st.shiftCount++;
+     st.busySlots.push({ s:slot.startAbs, e:slot.endAbs });
+     st.dailyMins[slot.milDay] = (st.dailyMins[slot.milDay]||0) + slot.dur;
+    }
+   }
+  }
+  if (!swapped) break;
+ }
  /* הרכב תוצאות */
  const resultMap = {};
  missions.forEach(m => {
