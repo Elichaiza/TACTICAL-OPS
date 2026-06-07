@@ -2844,15 +2844,11 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const att = dep.attendance||{};
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
  const presentSoldiers = dep.soldiers.filter(s=>getAttStatus((att[selDate]||{})[s.id])==="present");
- /* שיבוץ V2 — האלגוריתם החדש */
- async function run(force = false) {
+ /* שיבוץ — מנוע OR-Tools. אם יש חוסר, מציג הסבר + אפשרות לשיבוץ חלקי */
+ async function run() {
   const missions = dep.missions.filter(m=>selMissions.includes(m.id));
   if (!missions.length) return;
-  if (!force) {
-   const issues = feasibilityCheck(missions, dep.soldiers, att);
-   if (issues.length) { setFeasIssues(issues); setFeasSummary(null); setWarnMode('precheck'); setShowWarning(true); return; }
-  }
-  setShowWarning(false); setFeasIssues([]);
+  setShowWarning(false); setFeasIssues([]); setFeasPartial(null);
   setIsGenerating(true); setResult(null);
   // ── נסה את מנוע OR-Tools (backend); אם נכשל — fallback ל-JS V2 ──
   try {
