@@ -1220,8 +1220,9 @@ function AppInner() {
      setScreen("register");
      setDataLoaded(true);
      return; } }
-   if (session && storedUsers) {
-    const u = storedUsers.find(u => u.email===session.email);
+   const session = lsGet("tac:session");
+   if (session && cloudUsers) {
+    const u = cloudUsers.find(u => u.email===session.email);
     if (u && u.role !== "pending" && !u.blocked) {
      setCurrentUser(u); setScreen("app");
      setActiveTab(u.role==="viewer"?"myshift":"soldiers");
@@ -1230,27 +1231,10 @@ function AppInner() {
    setDataLoaded(true);
   })();
  }, []);
- useEffect(() => {
-  if (!dataLoaded) return;
-  /* ── localStorage sync (every 5s) — keeps React in sync with localStorage ── */
-  const localInterval = setInterval(async () => {
-   if (isSaving.current) return;
-   const storedDeps = await sGet("tac:deployments", true);
-   const storedUsers = await sGet("tac:users", true);
-   if (isSaving.current) return;
-   if (storedDeps) setDeployments(storedDeps);
-   if (storedUsers) setUsers(storedUsers);
-  }, 5000);
-  /* Cloud sync happens ONLY on page load (in the useEffect above).
-     No periodic pulling — it causes data loss when Supabase is behind.
-     Push to Supabase happens on every save (saveDeps/saveUsers). */
-  return () => clearInterval(localInterval);
- }, [dataLoaded]);
  async function saveUsers(u) {
   isSaving.current = true;
   setUsers(u);
-  await sSet("tac:users", u, true);
-  syncUsersToDb(u).catch(()=>{});
+  await syncUsersToDb(u).catch(()=>{});
   isSaving.current = false; }
  async function saveDeps(d) {
   isSaving.current = true;
