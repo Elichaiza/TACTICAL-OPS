@@ -1594,6 +1594,24 @@ function AppInner() {
       {activeTab==="myshift"    && <MyShiftTab dep={currentDep} currentUser={currentUser} users={users} saveUsers={saveUsers} notify={notify} />}
       {activeTab==="users"      && <UsersTab users={users} saveUsers={saveUsers} currentUser={currentUser} dep={currentDep} notify={notify} />}
      </div> </div> )}
+   {['soldiers','missions','attendance','assignment','users'].includes(activeTab) && currentDep && (
+    <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:200,
+     background:'linear-gradient(to top, #060a12 80%, transparent)',
+     padding:'18px 24px 14px',display:'flex',justifyContent:'flex-end'}}>
+     <button onClick={forceSaveToCloud} disabled={cloudSyncStatus==='saving'}
+      style={{display:'flex',alignItems:'center',gap:8,
+       padding:'10px 24px',borderRadius:10,fontSize:14,fontWeight:600,cursor:'pointer',
+       border:`1px solid ${cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#1e3a5f'}`,
+       background: cloudSyncStatus==='ok'?'#052e16':cloudSyncStatus==='err'?'#150707':'#0d1f3c',
+       color:  cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#60a5fa',
+       transition:'all .3s', opacity: cloudSyncStatus==='saving'?0.6:1}}>
+      {cloudSyncStatus==='saving' ? '⏳ שומר...'
+       : cloudSyncStatus==='ok'   ? '✓ נשמר ב-Supabase'
+       : cloudSyncStatus==='err'  ? '✗ שגיאת שמירה'
+       : '☁ שמור ל-Supabase'}
+     </button>
+    </div>
+   )}
    {profileOpen && (
     <ProfileModal
      currentUser={currentUser}
