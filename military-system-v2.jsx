@@ -2864,23 +2864,45 @@ function AssignmentTab({ dep, updateDep, notify }) {
    } else {
     // אי-היתכנות שזוהתה ע"י הסולבר — הצג סיבות מפורטות
     const reasons = out.reasons || [];
-    const holes = reasons.find(r => r.type === 'holes');
     const CAUSE = {
      no_eligible:      'אין אף חייל נוכח/מוסמך למשמרת זו',
      too_few_eligible: 'פחות חיילים זכאים מהנדרש',
      manpower:         'אין מספיק כוח אדם — החיילים הזמינים כבר תפוסים (מנוחה/מכסה יומית)',
     };
-    if (holes && holes.holes.length) {
-     const issues = holes.holes.map(h => {
-      const m = missions.find(mm => mm.id === h.missionId);
-      const si = parseInt(h.slot.split('__')[1], 10);
-      const sh = m ? computeMissionShifts(m)[si] : null;
-      return { type:'hole', mission: m?.name || h.missionId,
-               shift: (si+1), date: sh?.startDate || '',
-               time: sh ? `${sh.start}–${sh.end}` : '',
-               have: h.have, need: h.need,
-               cause: CAUSE[h.cause] || 'לא ניתן למלא' };
-     });
+    // עוזר: פענוח מפתח-משמרת לפרטי משימה
+    const slotInfo = (slotKey) => {
+     const sep = slotKey.lastIndexOf('__');
+     const mId = slotKey.slice(0, sep);
+     const si  = parseInt(slotKey.slice(sep + 2), 10);
+     const m   = missions.find(mm => mm.id === mId);
+     const sh  = m ? computeMissionShifts(m)[si] : null;
+     return { name: m?.name || mId, shift: si + 1,
+              date: sh?.startDate || '', time: sh ? `${sh.start}–${sh.end}` : '' };
+    };
+    const issues = [];
+    for (const r of reasons) {
+     if (r.type === 'holes') {
+      for (const h of (r.holes || [])) {
+       const inf = slotInfo(h.slot);
+       issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
+                     time: inf.time, have: h.have, need: h.need,
+                     cause: CAUSE[h.cause] || 'לא ניתן למלא' });
+      }
+     } else if (r.type === 'no_eligible' || r.type === 'few_eligible') {
+      const inf = slotInfo(r.slot);
+      issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
+                    time: inf.time, have: r.have || 0, need: r.need || 0,
+                    cause: CAUSE[r.type === 'no_eligible' ? 'no_eligible' : 'too_few_eligible'] });
+     } else if (r.type === 'missing_role') {
+      const inf = slotInfo(r.slot);
+      issues.push({ type:'missing_role', mission: inf.name, shift: inf.shift, date: inf.date, item: r.role });
+     } else if (r.type === 'few_special') {
+      const inf = slotInfo(r.slot);
+      issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
+                    time: inf.time, have: 0, need: 0, cause: 'אין מספיק בעלי תפקיד מיוחד' });
+     }
+    }
+    if (issues.length) {
      setFeasIssues(issues); setFeasSummary(out.summary || null); setWarnMode('infeasible'); setShowWarning(true);
     } else {
      notify('לא נמצא שיבוץ חוקי — בדוק דרישות המשימות', 'error');
