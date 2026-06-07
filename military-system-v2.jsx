@@ -2129,8 +2129,8 @@ function MissionsTab({ dep, updateDep, notify }) {
    const endOffsetMins   = (i === totalShifts - 1) ? totalMins : (i + 1) * shiftMins;
    const absStart = startM + startOffsetMins;
    const absEnd   = startM + endOffsetMins;
-   const startDayOffset = Math.floor(startOffsetMins / 1440);
-   const endDayOffset   = Math.floor(endOffsetMins   / 1440);
+   const startDayOffset = Math.floor(absStart / 1440);
+   const endDayOffset   = Math.floor(absEnd   / 1440);
    shifts.push({
     start:      minsToTime(absStart),
     end:        minsToTime(absEnd),
