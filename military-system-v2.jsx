@@ -60,10 +60,8 @@ function shiftDur(s,e) { let sv=parseTime(s),ev=parseTime(e); if(ev<=sv)ev+=1440
 /* ===========================================================
  STORAGE HELPERS
 =========================================================== */
-async function sGet(key, shared=false) {
- try { const r=await window.storage.get(key,shared); return r?JSON.parse(r.value):null; } catch(e) { return null; } }
-async function sSet(key, val, shared=false) {
- try { await window.storage.set(key,JSON.stringify(val),shared); return true; } catch(e) { return false; } }
+function lsGet(key) { try { const r=localStorage.getItem(key); return r?JSON.parse(r):null; } catch { return null; } }
+function lsSet(key, val) { try { if(val==null) localStorage.removeItem(key); else localStorage.setItem(key,JSON.stringify(val)); } catch {} }
 function timeToMins(t) {
  if (!t) return 0;
  const [h, m] = t.split(":").map(Number);
