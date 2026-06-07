@@ -2886,10 +2886,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
                      cause: CAUSE[h.cause] || 'לא ניתן למלא' });
       }
      } else if (r.type === 'no_eligible' || r.type === 'few_eligible') {
-      const inf = slotInfo(r.slot);
-      issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
-                    time: inf.time, have: r.have || 0, need: r.need || 0,
-                    cause: CAUSE[r.type === 'no_eligible' ? 'no_eligible' : 'too_few_eligible'] });
+      // מכוסה כבר ע"י holes (עם סיבה) — דלג כדי למנוע כפילות
      } else if (r.type === 'missing_role') {
       const inf = slotInfo(r.slot);
       issues.push({ type:'missing_role', mission: inf.name, shift: inf.shift, date: inf.date, item: r.role });
