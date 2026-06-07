@@ -96,20 +96,26 @@ def solve(problem):
         return {"feasible": False, "reasons": infeasible_reasons}
 
     # ── עומס שעות לכל חייל ──
+    total_demand = sum(sl["dur"] * sl["needed"] for sl in slots)
     load = {}
     for s in soldiers:
         sid = s["id"]
         terms = [sl["dur"] * x[(sl["key"], sid)] for sl in slots if (sl["key"], sid) in x]
-        lv = model.NewIntVar(0, 100000, f"load_{sid}")
+        lv = model.NewIntVar(0, total_demand, f"load_{sid}")
         model.Add(lv == (sum(terms) if terms else 0))
         load[sid] = lv
 
-    # ── מטרה רכה #1: איזון שעות (minimize maxLoad - minLoad) ──
-    maxL = model.NewIntVar(0, 100000, "maxL")
-    minL = model.NewIntVar(0, 100000, "minL")
+    # ── מטרה רכה #1: איזון שעות — מזעור סכום ריבועי העומסים ──
+    # סך השעות קבוע (איוש מלא) ⇒ מזעור Σload² שקול למזעור השונות = פיזור הכי שווה.
+    # זה מאזן את *כל* החיילים סביב הממוצע, ולא רק את הקצוות (max-min).
+    sq_terms = []
     for s in soldiers:
-        model.Add(maxL >= load[s["id"]])
-        model.Add(minL <= load[s["id"]])
+        sid = s["id"]
+        sqv = model.NewIntVar(0, total_demand * total_demand, f"sq_{sid}")
+        model.AddMultiplicationEquality(sqv, [load[sid], load[sid]])
+        sq_terms.append(sqv)
+    sum_sq = model.NewIntVar(0, total_demand * total_demand * max(1, len(soldiers)), "sum_sq")
+    model.Add(sum_sq == sum(sq_terms))
 
     # ── מטרה רכה #2: רוטציה — קנס על אותה משימה יותר מפעם ──
     missions = set(sl["missionId"] for sl in slots)
@@ -126,8 +132,8 @@ def solve(problem):
     rot = model.NewIntVar(0, 100000, "rot")
     model.Add(rot == (sum(excess) if excess else 0))
 
-    # האיזון דומיננטי (×1000), הרוטציה משנית
-    model.Minimize((maxL - minL) * 1000 + rot)
+    # האיזון דומיננטי (Σload²), הרוטציה משנית (שובר שוויון)
+    model.Minimize(sum_sq * 10000 + rot)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 8.0   # מתחת למגבלת Vercel Hobby (10ש')
@@ -140,11 +146,14 @@ def solve(problem):
             for sid in sl["eligible"]:
                 if solver.Value(x[(sl["key"], sid)]) == 1:
                     assign[sl["key"]].append(sid)
+        loads = [solver.Value(load[s["id"]]) for s in soldiers]
+        working = [v for v in loads if v > 0]
+        spread = (max(working) - min(working)) if working else 0
         return {
             "feasible": True,
             "optimal": status == cp_model.OPTIMAL,
             "assignments": dict(assign),
-            "spread": solver.Value(maxL) - solver.Value(minL),
+            "spread": spread,
             "rotation": solver.Value(rot),
         }
 
