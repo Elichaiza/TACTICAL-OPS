@@ -1506,9 +1506,10 @@ function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {})
   slots, forced,
  };
 }
-/* קורא ל-backend ומחזיר { result | infeasible } */
-async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = {}) {
+/* קורא ל-backend ומחזיר { result | infeasible }. mode='force' = מילוי כפוי */
+async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = {}, mode = null) {
  const problem = buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments);
+ if (mode) problem.mode = mode;
  const resp = await fetch('/api/solve', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
