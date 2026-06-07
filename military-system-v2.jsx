@@ -1289,7 +1289,7 @@ function AppInner() {
   notify(`שלום, ${user.name}!`, "success");
   return "ok"; }
  async function handleLogout() {
-  await sSet("tac:session", null, false);
+  lsSet("tac:session", null);
   setCurrentUser(null);
   setScreen("login"); }
  async function handleRegister(name, email, password) {
