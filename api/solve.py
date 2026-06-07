@@ -189,7 +189,8 @@ def _attempt(problem, use_cap=True, time_limit=9.0):
         spread = (max(working) - min(working)) if working else 0
         return {
             "feasible": True,
-            "optimal": status == cp_model.OPTIMAL,
+            # פער 0 = איזון מושלם, נחשב אופטימלי גם אם הסולבר לא הוכיח זאת בזמן
+            "optimal": status == cp_model.OPTIMAL or spread == 0,
             "assignments": dict(assign),
             "spread": spread,
             "rotation": solver.Value(rot),
@@ -250,9 +251,39 @@ def _relaxed_diagnose(problem):
         for sl in slots:
             got = sum(solver.Value(x[(sl["key"], sid)]) for sid in sl["eligible"])
             if got < sl["needed"]:
+                # סיווג סיבת החוסר לכל משמרת
+                if len(sl["eligible"]) == 0:
+                    cause = "no_eligible"          # אין חייל נוכח/מוסמך כלל
+                elif len(sl["eligible"]) < sl["needed"]:
+                    cause = "too_few_eligible"     # פחות מועמדים זכאים מהנדרש
+                else:
+                    cause = "manpower"             # יש מועמדים אך נוצלו במקום אחר (מנוחה/מכסה)
                 holes.append({"slot": sl["key"], "missionId": sl["missionId"],
-                              "have": got, "need": sl["needed"]})
-    return {"feasible": False, "reasons": [{"type": "holes", "holes": holes}]}
+                              "have": got, "need": sl["needed"], "cause": cause})
+
+    # ── ניתוח כולל: ביקוש מול קיבולת זמינה ──
+    demand = sum(sl["dur"] * sl["needed"] for sl in slots)
+    # קיבולת = לכל חייל, 8ש' × מספר חלונות-יממה שבהם הוא זכאי למשהו
+    win_of = {}
+    for sl in slots:
+        win_of[sl["key"]] = (sl["startAbs"] - 600) // 1440
+    sol_windows = {}
+    for sl in slots:
+        for sid in sl["eligible"]:
+            sol_windows.setdefault(sid, set()).add(win_of[sl["key"]])
+            # משמרת שחוצה גבול 10:00 נוגעת גם בחלון הבא
+            if (sl["endAbs"] - 600) // 1440 != win_of[sl["key"]]:
+                sol_windows[sid].add((sl["endAbs"] - 600) // 1440)
+    capacity = sum(len(w) * MAX_DAILY for w in sol_windows.values())
+
+    summary = {
+        "demand_hours": round(demand / 60, 1),
+        "capacity_hours": round(capacity / 60, 1),
+        "shortfall_hours": round(max(0, demand - capacity) / 60, 1),
+        "present_soldiers": len(sol_windows),
+        "unfilled_shifts": len(holes),
+    }
+    return {"feasible": False, "reasons": [{"type": "holes", "holes": holes}], "summary": summary}
 
 
 class handler(BaseHTTPRequestHandler):
