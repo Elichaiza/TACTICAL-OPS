@@ -1283,7 +1283,7 @@ function AppInner() {
    notify("סיסמה שגויה.", "error");
    return "wrong_password"; }
   setCurrentUser(user);
-  await sSet("tac:session", { email:norm }, false);
+  lsSet("tac:session", { email:norm });
   setScreen("app");
   setActiveTab(user.role==="viewer" ? "myshift" : "soldiers");
   notify(`שלום, ${user.name}!`, "success");
