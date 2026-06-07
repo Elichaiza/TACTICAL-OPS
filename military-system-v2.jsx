@@ -3088,7 +3088,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
       ))} </div> )}
     <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:10}}>
      <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-      <button onClick={()=>run(false)} disabled={isGenerating||!selMissions.length}
+      <button onClick={()=>run()} disabled={isGenerating||!selMissions.length}
        style={{...S.btnPrimary,opacity:(isGenerating||!selMissions.length)?0.4:1,fontSize:15,padding:"11px 28px"}}>
        {isGenerating ? '⏳ מחשב שיבוץ...' : '⚡ צור שיבוץ'} </button>
       <button onClick={runLegacy} disabled={isGenerating||!selMissions.length||!presentSoldiers.length}
