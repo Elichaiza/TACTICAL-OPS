@@ -1447,6 +1447,11 @@ function _milDay(dateStr, timeStr) {
  }
  return dateStr;
 }
+function _addDaysStr(dateStr, days) {
+ const [y, m, d] = (dateStr || '2000-01-01').split('-').map(Number);
+ const dt = new Date(Date.UTC(y, m - 1, d) + days * 86400000);
+ return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`;
+}
 /* בונה את בעיית ה-CSP לשליחה ל-backend — כולל זכאות פר-משמרת */
 function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {}) {
  const slots = [];
