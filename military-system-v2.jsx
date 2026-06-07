@@ -1516,28 +1516,29 @@ async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = 
  });
  if (!resp.ok) throw new Error(`solver ${resp.status}`);
  const data = await resp.json();
- if (!data.feasible) return { feasible: false, reasons: data.reasons || [], summary: data.summary, error: data.error };
- // מיפוי חזרה לפורמט התוצאה של ה-app
+ // ממפה אובייקט assignments → מבנה התוצאה של ה-app
  const byId = {};
  soldiers.forEach(s => { byId[s.id] = s; });
- const resultMap = {};
- missions.forEach(m => {
-  resultMap[m.id] = {
-   missionId: m.id, missionName: m.name,
-   shifts: computeMissionShifts(m).map((sh, si) => {
-    const ids = data.assignments[`${m.id}__${si}`] || [];
-    const needed = m.soldiersPerShift || 1;
-    return {
-     ...sh,
-     soldierIds: ids,
-     soldierNames: ids.map(id => byId[id]?.name || id),
-     soldierDetails: ids.map(id => ({ id, name: byId[id]?.name || id, role: byId[id]?.role || '' })),
-     needed, filled: ids.length >= needed,
-    };
-   }),
-  };
- });
- return { feasible: true, result: missions.map(m => resultMap[m.id]),
+ const mapResult = (assignments) => missions.map(m => ({
+  missionId: m.id, missionName: m.name,
+  shifts: computeMissionShifts(m).map((sh, si) => {
+   const ids = (assignments || {})[`${m.id}__${si}`] || [];
+   const needed = m.soldiersPerShift || 1;
+   return {
+    ...sh,
+    soldierIds: ids,
+    soldierNames: ids.map(id => byId[id]?.name || id),
+    soldierDetails: ids.map(id => ({ id, name: byId[id]?.name || id, role: byId[id]?.role || '' })),
+    needed, filled: ids.length >= needed,
+   };
+  }),
+ }));
+ if (!data.feasible) {
+  // אי-היתכנות — מחזיר גם את השיבוץ החלקי (מקסימום מילוי) להצגה אם היוזר יבחר
+  return { feasible: false, reasons: data.reasons || [], summary: data.summary,
+           partialResult: data.partial ? mapResult(data.partial) : null, error: data.error };
+ }
+ return { feasible: true, result: mapResult(data.assignments),
           spread: data.spread, optimal: data.optimal, rotation: data.rotation };
 }
 /* ===========================================================
