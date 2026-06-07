@@ -1312,14 +1312,13 @@ function buildAssignmentV2(missions, soldiers, fullAtt, pinnedAssignments = {}) 
  }
  /* דירוג: גיוון → פחות שעות → פחות משמרות → פחות אפשרויות עתידיות → round-robin */
  function rankCandidates(pool, slot) {
-  /* חשב כמה סלוטים פתוחים נוספים יש לכל מועמד (ללא חפיפה זמן) */
+  /* חשב כמה סלוטים עתידיים כל מועמד יכול למלא — בדיקה מלאה עם canAssign */
   const futureOpts = {};
   for (const s of pool) {
    let cnt = 0;
-   const bs = state[s.id].busySlots;
    for (const sl of allSlots) {
     if (sl === slot || sl.assignedIds.has(s.id) || sl.assigned.length >= sl.needed) continue;
-    if (!bs.some(b => b.s < sl.endAbs && sl.startAbs < b.e)) cnt++;
+    if (canAssign(s, sl)) cnt++;
    }
    futureOpts[s.id] = cnt;
   }
