@@ -2838,6 +2838,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [feasIssues, setFeasIssues] = useState([]);
  const [showWarning, setShowWarning] = useState(false);
  const [feasSummary, setFeasSummary] = useState(null);
+ const [warnMode, setWarnMode] = useState('precheck'); // precheck | infeasible
  const printRef = useRef();
  const att = dep.attendance||{};
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
