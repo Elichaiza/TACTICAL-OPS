@@ -199,9 +199,138 @@ def _attempt(problem, use_cap=True, time_limit=9.0):
     return None  # אין פתרון (אולי בגלל התקרה) — המתזמן ינסה בלי תקרה
 
 
+def _scan_violations(problem, assign):
+    """סורק שיבוץ ומחזיר רשימת הפרות חוק קריאות."""
+    slots = {sl["key"]: sl for sl in problem["slots"]}
+    role_of = {s["id"]: s["role"] for s in problem["soldiers"]}
+    per = {}
+    for k, ids in assign.items():
+        for sid in ids:
+            per.setdefault(sid, []).append(slots[k])
+    V = []
+    for sid, sls in per.items():
+        ss = sorted(sls, key=lambda s: s["startAbs"])
+        for i in range(len(ss)):
+            for j in range(i + 1, len(ss)):
+                gap = ss[j]["startAbs"] - ss[i]["endAbs"]
+                if 0 <= gap < MIN_REST:
+                    V.append({"type": "rest", "soldier": sid,
+                              "slotA": ss[i]["key"], "slotB": ss[j]["key"], "gap": gap})
+        starts = set()
+        for sl in sls:
+            k = (sl["startAbs"] - 600) // 1440
+            starts.update((k - 1, k, k + 1))
+        for k in starts:
+            ws = 600 + k * 1440
+            tot = sum(max(0, min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)) for sl in sls)
+            if tot > MAX_DAILY:
+                V.append({"type": "daily", "soldier": sid, "date": _date_from_k(k), "minutes": tot})
+    for k, sl in slots.items():
+        got = assign.get(k, [])
+        if len(got) < sl["needed"]:
+            V.append({"type": "unfilled", "slot": k, "have": len(got), "need": sl["needed"]})
+        for r in sl.get("mandatory", []):
+            if not any(role_of.get(s) == r for s in got):
+                V.append({"type": "role", "slot": k, "role": r})
+        sp = sum(1 for s in got if role_of.get(s) in SPECIAL_ROLES)
+        if sp < sl.get("minSpecial", 0):
+            V.append({"type": "special", "slot": k, "have": sp, "need": sl["minSpecial"]})
+    return V
+
+
+def _attempt_force(problem, time_limit=7.0):
+    """מילוי כפוי: ממלא כל משמרת (עד גבול הזמינים), שובר רק מנוחה/מכסה/תפקיד
+    (לא חפיפה פיזית), ממזער הפרות. מחזיר שיבוץ + רשימת ההפרות."""
+    soldiers = problem["soldiers"]
+    slots = problem["slots"]
+    role_of = {s["id"]: s["role"] for s in soldiers}
+    model = cp_model.CpModel()
+    x = {}
+    for sl in slots:
+        for sid in sl["eligible"]:
+            x[(sl["key"], sid)] = model.NewBoolVar(f"x_{sl['key']}_{sid}")
+    for key, sid in problem.get("forced", []):
+        if (key, sid) in x:
+            model.Add(x[(key, sid)] == 1)
+    # מילוי כפוי — עד הנדרש או עד מספר הזמינים
+    for sl in slots:
+        vs = [x[(sl["key"], sid)] for sid in sl["eligible"]]
+        if vs:
+            model.Add(sum(vs) == min(sl["needed"], len(vs)))
+    pen = []
+    n = len(slots)
+    for i in range(n):
+        for j in range(i + 1, n):
+            a, b = slots[i], slots[j]
+            common = set(a["eligible"]) & set(b["eligible"])
+            if not common:
+                continue
+            overlap = a["startAbs"] < b["endAbs"] and b["startAbs"] < a["endAbs"]
+            gap = (b["startAbs"] - a["endAbs"]) if a["startAbs"] <= b["startAbs"] else (a["startAbs"] - b["endAbs"])
+            for sid in common:
+                if overlap:
+                    model.Add(x[(a["key"], sid)] + x[(b["key"], sid)] <= 1)  # פיזי — קשיח
+                elif 0 <= gap < MIN_REST:
+                    v = model.NewBoolVar(f"rest_{a['key']}_{b['key']}_{sid}")
+                    model.Add(v >= x[(a["key"], sid)] + x[(b["key"], sid)] - 1)
+                    pen.append(v * 100)
+    starts = set()
+    for sl in slots:
+        k = (sl["startAbs"] - 600) // 1440
+        starts.update((k - 1, k, k + 1))
+    for s in soldiers:
+        sid = s["id"]
+        for k in starts:
+            ws = 600 + k * 1440
+            terms = []
+            for sl in slots:
+                if (sl["key"], sid) not in x:
+                    continue
+                ov = min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)
+                if ov > 0:
+                    terms.append(ov * x[(sl["key"], sid)])
+            if terms:
+                ex = model.NewIntVar(0, 100000, f"ex_{sid}_{k}")
+                model.Add(ex >= sum(terms) - MAX_DAILY)
+                pen.append(ex)  # קנס לפי דקות חריגה
+    for sl in slots:
+        for r in sl.get("mandatory", []):
+            rv = [x[(sl["key"], sid)] for sid in sl["eligible"] if role_of.get(sid) == r]
+            miss = model.NewBoolVar(f"mr_{sl['key']}_{r}")
+            if rv:
+                model.Add(sum(rv) == 0).OnlyEnforceIf(miss)
+                model.Add(sum(rv) >= 1).OnlyEnforceIf(miss.Not())
+            else:
+                model.Add(miss == 1)
+            pen.append(miss * 500)
+        if sl.get("minSpecial", 0) > 0:
+            sp = [x[(sl["key"], sid)] for sid in sl["eligible"] if role_of.get(sid) in SPECIAL_ROLES]
+            short = model.NewIntVar(0, sl["needed"], f"sp_{sl['key']}")
+            model.Add(short >= sl["minSpecial"] - (sum(sp) if sp else 0))
+            pen.append(short * 300)
+    model.Minimize(sum(pen) if pen else 0)
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_limit
+    solver.parameters.num_search_workers = 8
+    status = solver.Solve(model)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return {"feasible": False, "reasons": [{"type": "holes", "holes": []}],
+                "summary": _diagnose_summary(problem, [])}
+    assign = defaultdict(list)
+    for sl in slots:
+        for sid in sl["eligible"]:
+            if solver.Value(x[(sl["key"], sid)]) == 1:
+                assign[sl["key"]].append(sid)
+    return {"feasible": True, "forced_fill": True, "assignments": dict(assign),
+            "violations": _scan_violations(problem, dict(assign))}
+
+
 def solve(problem):
     """מתזמן: ניסיון עם תקרה הדוקה (מהיר ומאוזן), ואם נכשל — בלי תקרה, ואם
-    גם זה נכשל — אבחון מלא + שיבוץ חלקי (מקסימום מילוי) להצגה ליוזר."""
+    גם זה נכשל — אבחון מלא + שיבוץ חלקי (מקסימום מילוי) להצגה ליוזר.
+    mode=force → מילוי כפוי עם דיווח הפרות."""
+    if problem.get("mode") == "force":
+        return _attempt_force(problem)
     capped = _attempt(problem, use_cap=True, time_limit=6.0)
     if isinstance(capped, dict) and capped.get("feasible"):
         return capped
