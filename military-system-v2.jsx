@@ -1458,16 +1458,19 @@ function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {})
    const eRaw = _toAbs(sh.endDate || sh.startDate, sh.end);
    const eAbs = eRaw > sAbs ? eRaw : eRaw + 1440;
    const reqCerts = mission.requiredCerts || [];
-   // זכאות: נוכח באותו יום + חלון שעות מכסה + הסמכות
+   // יום התורנות = תאריך תחילת המשימה + (dayNum-1). משמרת לילה שגולשת
+   // לבוקר המחרת שייכת ליום התורנות, לא לתאריך הקלנדרי.
+   const dutyDate = _addDaysStr(mission.startDate, (sh.dayNum || 1) - 1);
+   // זכאות: נוכח ביום התורנות + חלון שעות מכסה + הסמכות
    const eligible = [];
    for (const s of soldiers) {
-    const dayAtt = (fullAtt[sh.startDate] || {})[s.id];
+    const dayAtt = (fullAtt[dutyDate] || {})[s.id];
     if (getAttStatus(dayAtt) !== 'present') continue;
     if (dayAtt && typeof dayAtt === 'object') {
      const from = getAttField(dayAtt, 'from', '10:00');
      const to   = getAttField(dayAtt, 'to',   '10:00');
      if (from !== to) {
-      const base = _toAbs(sh.startDate, '00:00');
+      const base = _toAbs(dutyDate, '00:00');
       const fA = base + timeToMins(from);
       let   tA = base + timeToMins(to);
       if (tA <= fA) tA += 1440;
