@@ -1589,6 +1589,21 @@ function AppInner() {
         <span>{t.label}</span>
         {activeTab===t.id && <span style={S.tabUnderline}/>} </button>
       ))} </nav>
+     {['soldiers','missions','attendance','assignment','users'].includes(activeTab) && (
+      <div style={{display:'flex',justifyContent:'flex-start',padding:'8px 0 12px'}}>
+       <button onClick={forceSaveToCloud} disabled={cloudSyncStatus==='saving'}
+        style={{padding:'8px 22px',borderRadius:8,fontSize:13,fontWeight:700,cursor:'pointer',
+         border:`1.5px solid ${cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#3b82f6'}`,
+         background:cloudSyncStatus==='ok'?'#052e16':cloudSyncStatus==='err'?'#150707':'#0d1f3c',
+         color:cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#93c5fd',
+         opacity:cloudSyncStatus==='saving'?0.6:1,transition:'all .3s'}}>
+        {cloudSyncStatus==='saving'?'⏳ שומר...'
+         :cloudSyncStatus==='ok'  ?'✓ נשמר'
+         :cloudSyncStatus==='err' ?'✗ שגיאה'
+         :'☁ שמור ל-Supabase'}
+       </button>
+      </div>
+     )}
      <div style={S.tabContent}>
       {activeTab==="soldiers"   && <SoldiersTab dep={currentDep} updateDep={updateDep} notify={notify} role={currentUser?.role} />}
       {activeTab==="missions"   && <MissionsTab dep={currentDep} updateDep={updateDep} notify={notify} role={currentUser?.role} />}
@@ -1598,25 +1613,6 @@ function AppInner() {
       {activeTab==="myshift"    && <MyShiftTab dep={currentDep} currentUser={currentUser} users={users} saveUsers={saveUsers} notify={notify} />}
       {activeTab==="users"      && <UsersTab users={users} saveUsers={saveUsers} currentUser={currentUser} dep={currentDep} notify={notify} />}
      </div>
-     {['soldiers','missions','attendance','assignment','users'].includes(activeTab) && (
-      <div style={{position:'sticky',bottom:0,zIndex:50,
-       background:'linear-gradient(to top,#060a12 60%,transparent)',
-       padding:'20px 0 12px',display:'flex',justifyContent:'center',
-       marginTop:16}}>
-       <button onClick={forceSaveToCloud} disabled={cloudSyncStatus==='saving'}
-        style={{padding:'12px 40px',borderRadius:12,fontSize:15,fontWeight:700,cursor:'pointer',
-         border:`2px solid ${cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#3b82f6'}`,
-         background:cloudSyncStatus==='ok'?'#052e16':cloudSyncStatus==='err'?'#150707':'#0d1f3c',
-         color:cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#93c5fd',
-         opacity:cloudSyncStatus==='saving'?0.6:1,transition:'all .3s',
-         boxShadow:'0 4px 24px rgba(0,0,0,0.4)'}}>
-        {cloudSyncStatus==='saving'?'⏳ שומר...'
-         :cloudSyncStatus==='ok'  ?'✓ נשמר ב-Supabase'
-         :cloudSyncStatus==='err' ?'✗ שגיאת שמירה'
-         :'☁ שמור ל-Supabase'}
-       </button>
-      </div>
-     )}
     </div> )}
    {profileOpen && (
     <ProfileModal
