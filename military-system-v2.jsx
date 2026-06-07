@@ -1239,8 +1239,7 @@ function AppInner() {
  async function saveDeps(d) {
   isSaving.current = true;
   setDeployments(d);
-  await sSet("tac:deployments", d, true);
-  syncDeploymentsToDb(d).catch(()=>{});
+  await syncDeploymentsToDb(d).catch(()=>{});
   isSaving.current = false; }
  async function updateDep(fn) {
   const next = deployments.map(d => d.id===currentDepId ? fn(d) : d);
