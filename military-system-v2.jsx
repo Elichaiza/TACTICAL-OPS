@@ -2849,7 +2849,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
   if (!missions.length) return;
   if (!force) {
    const issues = feasibilityCheck(missions, dep.soldiers, att);
-   if (issues.length) { setFeasIssues(issues); setShowWarning(true); return; }
+   if (issues.length) { setFeasIssues(issues); setFeasSummary(null); setWarnMode('precheck'); setShowWarning(true); return; }
   }
   setShowWarning(false); setFeasIssues([]);
   setIsGenerating(true); setResult(null);
