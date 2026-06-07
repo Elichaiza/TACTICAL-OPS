@@ -3215,15 +3215,27 @@ function AssignmentTab({ dep, updateDep, notify }) {
        <div style={{background:"#1a1207",border:"1px solid #b45309",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:13,color:"#fbbf24"}}>
         <div style={{fontWeight:700,marginBottom:6}}>📊 ניתוח כוח אדם</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:"4px 18px",color:"#e2e8f0"}}>
-         <span>נדרש: <strong>{feasSummary.demand_hours}ש'</strong></span>
-         <span>זמין: <strong>{feasSummary.capacity_hours}ש'</strong></span>
-         {feasSummary.shortfall_hours>0 &&
-          <span style={{color:"#f87171"}}>חוסר: <strong>{feasSummary.shortfall_hours}ש'</strong></span>}
+         <span>נדרש סה"כ: <strong>{feasSummary.demand_hours}ש'</strong></span>
          <span>חיילים נוכחים: <strong>{feasSummary.present_soldiers}</strong></span>
+         <span>משמרות לא מולאו: <strong style={{color:"#f87171"}}>{feasSummary.unfilled_shifts}</strong></span>
         </div>
-        {feasSummary.shortfall_hours>0 && (
-         <div style={{marginTop:8,color:"#fca5a5",fontSize:12}}>
-          ⚠ אין מספיק כוח אדם — חסרות כ-{feasSummary.shortfall_hours} שעות-חייל. הוסף חיילים או הפחת משמרות.
+        {(feasSummary.day_bottlenecks||[]).length>0 && (
+         <div style={{marginTop:10}}>
+          <div style={{color:"#fca5a5",fontWeight:600,marginBottom:4}}>⚠ עומס יומי חורג מהכוח הזמין:</div>
+          {feasSummary.day_bottlenecks.map((b,i)=>(
+           <div key={i} style={{color:"#e2e8f0",fontSize:12,marginRight:8}}>
+            • {fmtDate(b.date)}: נדרשות <strong>{b.demand_hours}ש'</strong> אך זמינים רק <strong>{b.soldiers}</strong> חיילים (<strong>{b.capacity_hours}ש'</strong>)
+           </div>
+          ))}
+         </div>)}
+        {(feasSummary.role_shortages||[]).length>0 && (
+         <div style={{marginTop:10}}>
+          <div style={{color:"#fca5a5",fontWeight:600,marginBottom:4}}>🎖 חוסר בבעלי תפקיד:</div>
+          {feasSummary.role_shortages.map((b,i)=>(
+           <div key={i} style={{color:"#e2e8f0",fontSize:12,marginRight:8}}>
+            • {fmtDate(b.date)}: דרושים <strong>{b.need}</strong> מסוג "{b.role}" אך יש רק <strong>{b.have}</strong>
+           </div>
+          ))}
          </div>)}
        </div>
       )}
