@@ -3339,7 +3339,7 @@ function UsersTab({ users, saveUsers, currentUser, dep, notify }) {
          <button
           onClick={async()=>{
            const updated={...invite,defaultRole:inviteRole};
-           await sSet("tac:invite",updated,true);
+           lsSet("tac:invite",updated);
            setInvite(updated);
            notify("תפקיד עודכן");
           }}
