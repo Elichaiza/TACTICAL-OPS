@@ -3128,7 +3128,7 @@ function UsersTab({ users, saveUsers, currentUser, dep, notify }) {
   const token = uid() + uid();
   const newInvite = { token, active:true, defaultRole:inviteRole,
    createdAt:new Date().toISOString(), createdBy:currentUser?.name };
-  await sSet("tac:invite", newInvite, true);
+  lsSet("tac:invite", newInvite);
   setInvite(newInvite);
   notify("קישור הזמנה נוצר","success"); }
  async function toggleInviteActive() {
