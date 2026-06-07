@@ -2861,7 +2861,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
   try {
    const out = await solveViaBackend(missions, dep.soldiers, att, pinnedAssignments);
    if (out.feasible) {
-    setResult(out.result);
+    setResult(out.result); setForceViolations(null);
     notify(out.optimal
      ? `שיבוץ אופטימלי! פער שעות: ${Math.round((out.spread||0)/60*10)/10}ש'`
      : `שיבוץ נמצא (פער: ${Math.round((out.spread||0)/60*10)/10}ש')`, 'success');
