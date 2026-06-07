@@ -3202,12 +3202,10 @@ function AssignmentTab({ dep, updateDep, notify }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
      <div style={{background:"#0d1117",border:"1px solid #f87171",borderRadius:14,padding:28,maxWidth:560,width:"100%",direction:"rtl"}}>
       <div style={{fontSize:20,fontWeight:700,color:"#f87171",marginBottom:6}}>
-       {warnMode==="infeasible" ? "✗ לא ניתן לשבץ את כל המשימות" : "⚠ נמצאו בעיות בנתונים"}
+       ✗ לא ניתן לשבץ את כל המשמרות
       </div>
       <div style={{fontSize:13,color:"#94a3b8",marginBottom:16}}>
-       {warnMode==="infeasible"
-        ? "המנוע לא הצליח למלא את כל המשמרות תחת החוקים (מנוחה 8ש' · מקסימום 8ש'/יממה). להלן הסיבות:"
-        : "לפני יצירת השיבוץ — שים לב לנקודות הבאות:"}
+       המנוע מילא את המקסימום האפשרי תחת החוקים (מנוחה 8ש' · מקסימום 8ש'/יממה · תפקידים והסמכות). אלו המשמרות שנותרו ריקות והסיבה:
       </div>
       {feasSummary && (
        <div style={{background:"#1a1207",border:"1px solid #b45309",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:13,color:"#fbbf24"}}>
