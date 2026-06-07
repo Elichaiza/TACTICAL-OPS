@@ -1383,6 +1383,7 @@ function AppInner() {
  const [activeTab, setActiveTab] = useState(null);
  const [notification, setNotification] = useState(null);
  const [dataLoaded, setDataLoaded] = useState(false);
+ const [cloudSyncStatus, setCloudSyncStatus] = useState(null); // null | 'saving' | 'ok' | 'err'
  const isSaving = useRef(false);
  const notify = (msg, type="success") => {
   setNotification({ msg, type });
