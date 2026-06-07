@@ -1516,7 +1516,7 @@ async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = 
  });
  if (!resp.ok) throw new Error(`solver ${resp.status}`);
  const data = await resp.json();
- if (!data.feasible) return { feasible: false, reasons: data.reasons || [], error: data.error };
+ if (!data.feasible) return { feasible: false, reasons: data.reasons || [], summary: data.summary, error: data.error };
  // מיפוי חזרה לפורמט התוצאה של ה-app
  const byId = {};
  soldiers.forEach(s => { byId[s.id] = s; });
