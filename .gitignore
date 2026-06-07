@@ -1,4 +1,6 @@
-node_modules/ 
-dist/ 
-.vite/ 
-.claude/ 
+node_modules/
+dist/
+.vite/
+.claude/
+.env.local
+nul
