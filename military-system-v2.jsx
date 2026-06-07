@@ -1440,12 +1440,14 @@ function AppInner() {
  async function saveUsers(u) {
   isSaving.current = true;
   setUsers(u);
-  await syncUsersToDb(u).catch(()=>{});
+  lsSet("tac:users", u);                    // מיידי + אמין
+  syncUsersToDb(u).catch(()=>{});           // Supabase async
   isSaving.current = false; }
  async function saveDeps(d) {
   isSaving.current = true;
   setDeployments(d);
-  await syncDeploymentsToDb(d).catch(()=>{});
+  lsSet("tac:deployments", d);              // מיידי + אמין
+  syncDeploymentsToDb(d).catch(()=>{});     // Supabase async
   isSaving.current = false; }
  async function updateDep(fn) {
   const next = deployments.map(d => d.id===currentDepId ? fn(d) : d);
