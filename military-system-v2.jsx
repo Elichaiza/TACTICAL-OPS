@@ -1255,7 +1255,7 @@ function AppInner() {
    allUsers = [admin];
    await saveUsers(allUsers);
    setCurrentUser(admin);
-   await sSet("tac:session", { email:norm }, false);
+   lsSet("tac:session", { email:norm });
    setScreen("app"); setActiveTab("soldiers");
    notify("ברוך הבא! הוגדרת כמנהל מערכת ראשי.", "success");
    return "ok"; }
@@ -1273,7 +1273,7 @@ function AppInner() {
    const updated = { ...user, passwordHash };
    await saveUsers(allUsers.map(u => u.id===user.id ? updated : u));
    setCurrentUser(updated);
-   await sSet("tac:session", { email:norm }, false);
+   lsSet("tac:session", { email:norm });
    setScreen("app");
    setActiveTab(user.role==="viewer" ? "myshift" : "soldiers");
    notify(`שלום, ${updated.name}! סיסמה הוגדרה.`, "success");
