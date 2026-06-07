@@ -2612,11 +2612,32 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [historyDays, setHistoryDays] = useState(0);
  const [debugInfo, setDebugInfo] = useState(null);
  const [pinnedAssignments, setPinnedAssignments] = useState({});
+ const [feasIssues, setFeasIssues] = useState([]);
+ const [showWarning, setShowWarning] = useState(false);
  const printRef = useRef();
  const att = dep.attendance||{};
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
  const presentSoldiers = dep.soldiers.filter(s=>getAttStatus((att[selDate]||{})[s.id])==="present");
- function run() {
+ /* שיבוץ V2 — האלגוריתם החדש */
+ function run(force = false) {
+  const missions = dep.missions.filter(m=>selMissions.includes(m.id));
+  if (!missions.length) return;
+  if (!force) {
+   const issues = feasibilityCheck(missions, dep.soldiers, att);
+   if (issues.length) { setFeasIssues(issues); setShowWarning(true); return; }
+  }
+  setShowWarning(false); setFeasIssues([]);
+  setIsGenerating(true); setResult(null);
+  setTimeout(() => {
+   try {
+    const res = buildAssignmentV2(missions, dep.soldiers, att, pinnedAssignments);
+    setResult(res);
+   } catch(e) { console.error('Assignment V2 error:', e); }
+   setIsGenerating(false);
+  }, 60);
+ }
+ /* שיבוץ ישן — גיבוי */
+ function runLegacy() {
   const missions = dep.missions.filter(m=>selMissions.includes(m.id));
   const missionHistory = {};
   (dep.assignments||[])
