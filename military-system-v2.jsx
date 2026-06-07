@@ -2912,8 +2912,31 @@ function AssignmentTab({ dep, updateDep, notify }) {
        <div style={{marginTop:6,fontSize:10,color:"#334155"}}>🟢 מעט = עדיפות לקבל משימה זו · 🔴 הרבה = יקבל עדיפות נמוכה</div>
       </div> )}
     </FormCard> )}
+   {/* מודל אזהרת היתכנות */}
+   {showWarning && (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+     <div style={{background:"#0d1117",border:"1px solid #f87171",borderRadius:14,padding:28,maxWidth:540,width:"100%",direction:"rtl"}}>
+      <div style={{fontSize:20,fontWeight:700,color:"#f87171",marginBottom:16}}>⚠ נמצאו בעיות בנתונים</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20,maxHeight:300,overflowY:"auto"}}>
+       {feasIssues.map((iss,i)=>(
+        <div key={i} style={{background:"#150707",border:"1px solid #7f1d1d",borderRadius:8,padding:"8px 12px",fontSize:12}}>
+         {iss.type==="no_attendance" && <><span style={{color:"#f87171"}}>📋 אין נוכחות</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)})</span></>}
+         {iss.type==="few_soldiers" && <><span style={{color:"#fbbf24"}}>👥 חסרים חיילים</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)}): יש {iss.have}, צריך {iss.need}</span></>}
+         {iss.type==="missing_cert"  && <><span style={{color:"#fb923c"}}>🏅 הסמכה חסרה</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)}): {iss.item}</span></>}
+         {iss.type==="missing_role"  && <><span style={{color:"#c4b5fd"}}>🎖 תפקיד חסר</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)}): {iss.item}</span></>}
+        </div>
+       ))}
+      </div>
+      <div style={{color:"#64748b",fontSize:13,marginBottom:20}}>האם להמשיך בשיבוץ בכל זאת? ייתכן שחלק מהמשמרות לא יתמלאו.</div>
+      <div style={{display:"flex",gap:10}}>
+       <button onClick={()=>run(true)} style={{...S.btnPrimary,flex:1}}>המשך בכל זאת</button>
+       <button onClick={()=>setShowWarning(false)} style={{...S.btnGhost,flex:1}}>בטל</button>
+      </div>
+     </div>
+    </div>
+   )}
    {isGenerating && (
-    <FormCard title="⏳ מחשב שיבוץ אופטימלי...">
+    <FormCard title="⏳ מחשב שיבוץ...">
      <div style={{textAlign:"center",padding:"30px 0",color:"#60a5fa",fontSize:16}}>
       <div style={{fontSize:40,marginBottom:12}}>⚙</div>
       האלגוריתם מחפש את השיבוץ הטוב ביותר...
