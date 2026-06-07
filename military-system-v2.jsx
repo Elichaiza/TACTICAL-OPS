@@ -1390,56 +1390,62 @@ function AppInner() {
   setTimeout(() => setNotification(null), 3500); };
  useEffect(() => {
   (async () => {
-   // 1. localStorage קודם — תמיד הכי עדכני במכשיר זה
-   let deps  = lsGet("tac:deployments");
-   let users = lsGet("tac:users");
-   // 2. localStorage ריק → מכשיר חדש, שאב מ-Supabase
-   if (!deps || deps.length === 0 || !users || users.length === 0) {
-    const [cloudDeps, cloudUsers] = await Promise.all([
-     loadDeploymentsFromDb(),
-     loadUsersFromDb(),
-    ]);
-    if ((!deps  || deps.length  === 0) && cloudDeps  && cloudDeps.length  > 0) {
-     deps = cloudDeps;
+   try {
+    // 1. localStorage קודם — תמיד הכי עדכני במכשיר זה
+    let deps  = lsGet("tac:deployments");
+    let users = lsGet("tac:users");
+    // 2. localStorage ריק → מכשיר חדש, שאב מ-Supabase (עם timeout של 8 שניות)
+    if (!deps || deps.length === 0 || !users || users.length === 0) {
+     const timeout = new Promise((_,r) => setTimeout(() => r(new Error('timeout')), 8000));
+     const [cloudDeps, cloudUsers] = await Promise.race([
+      Promise.all([loadDeploymentsFromDb(), loadUsersFromDb()]),
+      timeout.then(() => [null, null]),
+     ]).catch(() => [null, null]);
+     if ((!deps  || deps.length  === 0) && cloudDeps  && cloudDeps.length  > 0) {
+      deps = cloudDeps; lsSet("tac:deployments", deps);
+     }
+     if ((!users || users.length === 0) && cloudUsers && cloudUsers.length > 0) {
+      users = cloudUsers; lsSet("tac:users", users);
+     }
+    }
+    // 3. עדיין ריק — הרצה ראשונה, שתל seed
+    if (!deps || deps.length === 0) {
+     deps = seedData.deployments;
      lsSet("tac:deployments", deps);
+     syncDeploymentsToDb(deps).catch(()=>{});
     }
-    if ((!users || users.length === 0) && cloudUsers && cloudUsers.length > 0) {
-     users = cloudUsers;
+    if (!users || users.length === 0) {
+     users = seedData.users;
      lsSet("tac:users", users);
+     syncUsersToDb(users).catch(()=>{});
     }
-   }
-   // 3. עדיין ריק — הרצה ראשונה, שתל seed
-   if (!deps || deps.length === 0) {
-    deps = seedData.deployments;
-    lsSet("tac:deployments", deps);
-    syncDeploymentsToDb(deps).catch(()=>{});
-   }
-   if (!users || users.length === 0) {
-    users = seedData.users;
-    lsSet("tac:users", users);
-    syncUsersToDb(users).catch(()=>{});
-   }
-   setDeployments(deps);
-   setUsers(users);
-   // Check invite from URL
-   const urlParams = new URLSearchParams(window.location.search);
-   const inviteToken = urlParams.get("invite");
-   if (inviteToken) {
-    const inv = lsGet("tac:invite");
-    if (inv && inv.active && inv.token === inviteToken) {
-     setInviteData(inv);
-     setScreen("register");
-     setDataLoaded(true);
-     return; } }
-   const session = lsGet("tac:session");
-   if (session && cloudUsers) {
-    const u = cloudUsers.find(u => u.email===session.email);
-    if (u && u.role !== "pending" && !u.blocked) {
-     setCurrentUser(u); setScreen("app");
-     setActiveTab(u.role==="viewer"?"myshift":"soldiers");
+    setDeployments(deps);
+    setUsers(users);
+    // בדיקת invite מ-URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const inviteToken = urlParams.get("invite");
+    if (inviteToken) {
+     const inv = lsGet("tac:invite");
+     if (inv && inv.active && inv.token === inviteToken) {
+      setInviteData(inv); setScreen("register");
+      setDataLoaded(true); return;
+     }
+    }
+    // שחזור session
+    const session = lsGet("tac:session");
+    if (session && users) {
+     const u = users.find(u => u.email === session.email);
+     if (u && u.role !== "pending" && !u.blocked) {
+      setCurrentUser(u); setScreen("app");
+      setActiveTab(u.role === "viewer" ? "myshift" : "soldiers");
+     } else setScreen("login");
     } else setScreen("login");
-   } else setScreen("login");
-   setDataLoaded(true);
+   } catch (e) {
+    console.error('[init]', e);
+    setScreen("login");
+   } finally {
+    setDataLoaded(true);
+   }
   })();
  }, []);
  async function saveUsers(u) {
