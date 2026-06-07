@@ -2846,6 +2846,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [showWarning, setShowWarning] = useState(false);
  const [feasSummary, setFeasSummary] = useState(null);
  const [feasPartial, setFeasPartial] = useState(null); // שיבוץ חלקי להצגה אם היוזר בוחר
+ const [forceViolations, setForceViolations] = useState(null); // הפרות במילוי כפוי
  const printRef = useRef();
  const att = dep.attendance||{};
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
