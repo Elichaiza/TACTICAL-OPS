@@ -1302,7 +1302,7 @@ function AppInner() {
   const updated = [...allUsers, newUser];
   await saveUsers(updated);
   setCurrentUser(newUser);
-  await sSet("tac:session", { email:norm }, false);
+  lsSet("tac:session", { email:norm });
   window.history.replaceState({}, "", window.location.pathname);
   setScreen("app");
   setActiveTab("myshift");
