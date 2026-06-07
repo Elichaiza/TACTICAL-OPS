@@ -1390,33 +1390,37 @@ function AppInner() {
   setTimeout(() => setNotification(null), 3500); };
  useEffect(() => {
   (async () => {
-   // 1. Supabase ראשון (מקור אמת, מסנכרן בין מכשירים)
-   let [cloudDeps, cloudUsers] = await Promise.all([
-    loadDeploymentsFromDb(),
-    loadUsersFromDb(),
-   ]);
-   // 2. אם Supabase נכשל/ריק — localStorage כגיבוי
-   if (!cloudDeps || cloudDeps.length === 0) {
-    const local = lsGet("tac:deployments");
-    if (local && local.length > 0) cloudDeps = local;
+   // 1. localStorage קודם — תמיד הכי עדכני במכשיר זה
+   let deps  = lsGet("tac:deployments");
+   let users = lsGet("tac:users");
+   // 2. localStorage ריק → מכשיר חדש, שאב מ-Supabase
+   if (!deps || deps.length === 0 || !users || users.length === 0) {
+    const [cloudDeps, cloudUsers] = await Promise.all([
+     loadDeploymentsFromDb(),
+     loadUsersFromDb(),
+    ]);
+    if ((!deps  || deps.length  === 0) && cloudDeps  && cloudDeps.length  > 0) {
+     deps = cloudDeps;
+     lsSet("tac:deployments", deps);
+    }
+    if ((!users || users.length === 0) && cloudUsers && cloudUsers.length > 0) {
+     users = cloudUsers;
+     lsSet("tac:users", users);
+    }
    }
-   if (!cloudUsers || cloudUsers.length === 0) {
-    const local = lsGet("tac:users");
-    if (local && local.length > 0) cloudUsers = local;
+   // 3. עדיין ריק — הרצה ראשונה, שתל seed
+   if (!deps || deps.length === 0) {
+    deps = seedData.deployments;
+    lsSet("tac:deployments", deps);
+    syncDeploymentsToDb(deps).catch(()=>{});
    }
-   // 3. עדיין ריק — הרצה ראשונה, שתל נתוני seed
-   if (!cloudDeps || cloudDeps.length === 0) {
-    syncDeploymentsToDb(seedData.deployments).catch(()=>{});
-    lsSet("tac:deployments", seedData.deployments);
-    cloudDeps = seedData.deployments;
+   if (!users || users.length === 0) {
+    users = seedData.users;
+    lsSet("tac:users", users);
+    syncUsersToDb(users).catch(()=>{});
    }
-   if (!cloudUsers || cloudUsers.length === 0) {
-    syncUsersToDb(seedData.users).catch(()=>{});
-    lsSet("tac:users", seedData.users);
-    cloudUsers = seedData.users;
-   }
-   if (cloudDeps)  setDeployments(cloudDeps);
-   if (cloudUsers) setUsers(cloudUsers);
+   setDeployments(deps);
+   setUsers(users);
    // Check invite from URL
    const urlParams = new URLSearchParams(window.location.search);
    const inviteToken = urlParams.get("invite");
