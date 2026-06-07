@@ -2834,7 +2834,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
  const presentSoldiers = dep.soldiers.filter(s=>getAttStatus((att[selDate]||{})[s.id])==="present");
  /* שיבוץ V2 — האלגוריתם החדש */
- function run(force = false) {
+ async function run(force = false) {
   const missions = dep.missions.filter(m=>selMissions.includes(m.id));
   if (!missions.length) return;
   if (!force) {
@@ -2843,13 +2843,41 @@ function AssignmentTab({ dep, updateDep, notify }) {
   }
   setShowWarning(false); setFeasIssues([]);
   setIsGenerating(true); setResult(null);
-  setTimeout(() => {
+  // ── נסה את מנוע OR-Tools (backend); אם נכשל — fallback ל-JS V2 ──
+  try {
+   const out = await solveViaBackend(missions, dep.soldiers, att, pinnedAssignments);
+   if (out.feasible) {
+    setResult(out.result);
+    notify(out.optimal
+     ? `שיבוץ אופטימלי! פער שעות: ${Math.round((out.spread||0)/60*10)/10}ש'`
+     : `שיבוץ נמצא (פער: ${Math.round((out.spread||0)/60*10)/10}ש')`, 'success');
+   } else {
+    // אי-היתכנות שזוהתה ע"י הסולבר — הצג סיבות
+    const reasons = out.reasons || [];
+    const holes = reasons.find(r => r.type === 'holes');
+    if (holes) {
+     const issues = holes.holes.map(h => {
+      const m = missions.find(mm => mm.id === h.missionId);
+      const si = parseInt(h.slot.split('__')[1], 10);
+      const sh = m ? computeMissionShifts(m)[si] : null;
+      return { type:'few_soldiers', mission: m?.name || h.missionId,
+               shift: (si+1), date: sh?.startDate || '', have: h.have, need: h.need };
+     });
+     setFeasIssues(issues); setShowWarning(true);
+    } else {
+     notify('לא נמצא שיבוץ חוקי — בדוק דרישות המשימות', 'error');
+    }
+   }
+  } catch(e) {
+   // ה-backend לא זמין — fallback מקומי
+   console.warn('Backend solver unavailable, using local V2:', e.message);
    try {
     const res = buildAssignmentV2(missions, dep.soldiers, att, pinnedAssignments);
     setResult(res);
-   } catch(e) { console.error('Assignment V2 error:', e); }
-   setIsGenerating(false);
-  }, 60);
+    notify('שובץ מקומית (מנוע ענן לא זמין)', 'warn');
+   } catch(e2) { console.error('V2 error:', e2); notify('שגיאת שיבוץ', 'error'); }
+  }
+  setIsGenerating(false);
  }
  /* שיבוץ ישן — גיבוי */
  function runLegacy() {
