@@ -2807,9 +2807,13 @@ function AssignmentTab({ dep, updateDep, notify }) {
       ))} </div> )}
     <div style={{marginTop:16,display:"flex",flexDirection:"column",gap:10}}>
      <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-      <button onClick={run} disabled={isGenerating||!selMissions.length||!presentSoldiers.length}
-       style={{...S.btnPrimary,opacity:(isGenerating||!selMissions.length||!presentSoldiers.length)?0.4:1,fontSize:15,padding:"11px 28px"}}>
-       {isGenerating ? '⏳ מחשב שיבוץ...' : '⚡ צור שיבוץ אופטימלי'} </button>
+      <button onClick={()=>run(false)} disabled={isGenerating||!selMissions.length}
+       style={{...S.btnPrimary,opacity:(isGenerating||!selMissions.length)?0.4:1,fontSize:15,padding:"11px 28px"}}>
+       {isGenerating ? '⏳ מחשב שיבוץ...' : '⚡ צור שיבוץ'} </button>
+      <button onClick={runLegacy} disabled={isGenerating||!selMissions.length||!presentSoldiers.length}
+       title="אלגוריתם ישן — גיבוי"
+       style={{...S.btnGhost,opacity:(isGenerating||!selMissions.length||!presentSoldiers.length)?0.4:1,fontSize:12,padding:"8px 14px"}}>
+       🔄 שיבוץ ישן</button>
       {Object.values(pinnedAssignments).some(v=>v.length>0) && (
        <button onClick={clearAllPins} style={{...S.btnSmall,borderColor:"#f59e0b",color:"#f59e0b"}}>
         🗑 נקה כל הנעיצות ({Object.values(pinnedAssignments).reduce((s,v)=>s+v.length,0)}) </button> )}
