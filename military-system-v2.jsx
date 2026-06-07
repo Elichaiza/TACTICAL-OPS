@@ -1181,7 +1181,7 @@ function feasibilityCheck(missions, soldiers, fullAtt) {
  const issues = [];
  missions.forEach(mission => {
   computeMissionShifts(mission).forEach((sh, si) => {
-   const date = sh.startDate;
+   const date = _addDaysStr(mission.startDate, (sh.dayNum || 1) - 1); // יום התורנות
    const dayAtt = fullAtt[date] || {};
    const hasData = soldiers.some(s => dayAtt[s.id]);
    if (!hasData) {
