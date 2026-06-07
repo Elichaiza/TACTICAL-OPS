@@ -2900,7 +2900,8 @@ function AssignmentTab({ dep, updateDep, notify }) {
      }
     }
     if (issues.length) {
-     setFeasIssues(issues); setFeasSummary(out.summary || null); setWarnMode('infeasible'); setShowWarning(true);
+     setFeasIssues(issues); setFeasSummary(out.summary || null);
+     setFeasPartial(out.partialResult || null); setShowWarning(true);
     } else {
      notify('לא נמצא שיבוץ חוקי — בדוק דרישות המשימות', 'error');
     }
