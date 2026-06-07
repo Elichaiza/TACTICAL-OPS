@@ -3134,11 +3134,11 @@ function UsersTab({ users, saveUsers, currentUser, dep, notify }) {
  async function toggleInviteActive() {
   if (!invite) return;
   const updated = { ...invite, active:!invite.active };
-  await sSet("tac:invite", updated, true);
+  lsSet("tac:invite", updated);
   setInvite(updated);
   notify(updated.active ? "קישור הופעל" : "קישור נחסם"); }
  async function revokeInvite() {
-  await sSet("tac:invite", null, true);
+  lsSet("tac:invite", null);
   setInvite(null);
   notify("קישור נמחק"); }
  function copyInviteUrl() {
