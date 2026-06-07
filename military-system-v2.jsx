@@ -1539,6 +1539,11 @@ async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = 
   return { feasible: false, reasons: data.reasons || [], summary: data.summary,
            partialResult: data.partial ? mapResult(data.partial) : null, error: data.error };
  }
+ // מילוי כפוי — שיבוץ מלא + רשימת הפרות
+ if (data.forced_fill) {
+  return { feasible: true, forcedFill: true, result: mapResult(data.assignments),
+           violations: data.violations || [] };
+ }
  return { feasible: true, result: mapResult(data.assignments),
           spread: data.spread, optimal: data.optimal, rotation: data.rotation };
 }
