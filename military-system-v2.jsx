@@ -3318,7 +3318,20 @@ function AssignmentTab({ dep, updateDep, notify }) {
     </FormCard>
    )}
    {result && <>
-
+     {forceViolations && forceViolations.length>0 && (
+      <div style={{background:"#1a0f05",border:"2px solid #b45309",borderRadius:12,padding:"14px 18px",marginBottom:14}}>
+       <div style={{fontWeight:700,color:"#fbbf24",fontSize:15,marginBottom:8}}>
+        ⚠ שיבוץ במילוי כפוי — {forceViolations.length} חריגות מהחוקים
+       </div>
+       <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:200,overflowY:"auto"}}>
+        {forceViolations.map((v,i)=>(
+         <div key={i} style={{fontSize:12,color:"#e2e8f0"}}>
+          <span style={{color:v.color}}>{v.icon}</span> {v.text}
+         </div>
+        ))}
+       </div>
+      </div>
+     )}
      <FormCard title="📊 מד עומס חיילים — שוויון ומנוחה">
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
        {presentSoldiers
