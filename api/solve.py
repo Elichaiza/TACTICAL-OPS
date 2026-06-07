@@ -201,18 +201,21 @@ def _attempt(problem, use_cap=True, time_limit=9.0):
 
 def solve(problem):
     """מתזמן: ניסיון עם תקרה הדוקה (מהיר ומאוזן), ואם נכשל — בלי תקרה, ואם
-    גם זה נכשל — אבחון אילו משמרות לא ניתנות למילוי."""
+    גם זה נכשל — אבחון מלא + שיבוץ חלקי (מקסימום מילוי) להצגה ליוזר."""
     capped = _attempt(problem, use_cap=True, time_limit=6.0)
-    if isinstance(capped, dict) and capped.get("structural"):
-        return {"feasible": False, "reasons": capped["structural"]}
     if isinstance(capped, dict) and capped.get("feasible"):
         return capped
-    # התקרה אולי גרמה לאי-היתכנות — נסה בלי תקרה
-    uncapped = _attempt(problem, use_cap=False, time_limit=3.0)
-    if isinstance(uncapped, dict) and uncapped.get("feasible"):
-        return uncapped
-    # באמת אין פתרון — אבחן אילו משמרות חסרות
-    return _relaxed_diagnose(problem)
+    structural = capped.get("structural") if isinstance(capped, dict) else None
+    if not structural:
+        uncapped = _attempt(problem, use_cap=False, time_limit=3.0)
+        if isinstance(uncapped, dict) and uncapped.get("feasible"):
+            return uncapped
+        structural = uncapped.get("structural") if isinstance(uncapped, dict) else None
+    # אי-היתכנות (מבנית או קיבולת) — אבחן + החזר שיבוץ חלקי
+    diag = _relaxed_diagnose(problem)
+    if structural:
+        diag["reasons"] = structural + diag.get("reasons", [])
+    return diag
 
 
 def _relaxed_diagnose(problem):
@@ -248,10 +251,12 @@ def _relaxed_diagnose(problem):
     status = solver.Solve(model)
 
     holes = []
+    partial = defaultdict(list)
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         for sl in slots:
-            got = sum(solver.Value(x[(sl["key"], sid)]) for sid in sl["eligible"])
-            if got < sl["needed"]:
+            chosen = [sid for sid in sl["eligible"] if solver.Value(x[(sl["key"], sid)]) == 1]
+            partial[sl["key"]] = chosen
+            if len(chosen) < sl["needed"]:
                 # סיווג סיבת החוסר לכל משמרת
                 if len(sl["eligible"]) == 0:
                     cause = "no_eligible"          # אין חייל נוכח/מוסמך כלל
@@ -260,10 +265,11 @@ def _relaxed_diagnose(problem):
                 else:
                     cause = "manpower"             # יש מועמדים אך נוצלו במקום אחר (מנוחה/מכסה)
                 holes.append({"slot": sl["key"], "missionId": sl["missionId"],
-                              "have": got, "need": sl["needed"], "cause": cause})
+                              "have": len(chosen), "need": sl["needed"], "cause": cause})
 
     summary = _diagnose_summary(problem, holes)
-    return {"feasible": False, "reasons": [{"type": "holes", "holes": holes}], "summary": summary}
+    return {"feasible": False, "reasons": [{"type": "holes", "holes": holes}],
+            "summary": summary, "partial": dict(partial)}
 
 
 def _date_from_k(k):
