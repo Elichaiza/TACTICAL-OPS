@@ -1453,6 +1453,18 @@ function AppInner() {
  async function updateDep(fn) {
   const next = deployments.map(d => d.id===currentDepId ? fn(d) : d);
   await saveDeps(next); }
+ async function forceSaveToCloud() {
+  setCloudSyncStatus('saving');
+  try {
+   await Promise.all([
+    syncDeploymentsToDb(deployments),
+    syncUsersToDb(users),
+   ]);
+   setCloudSyncStatus('ok');
+  } catch {
+   setCloudSyncStatus('err');
+  }
+  setTimeout(() => setCloudSyncStatus(null), 2500); }
  async function handleLogin(email, password) {
   const norm = email.toLowerCase().trim();
   let allUsers = [...users];
