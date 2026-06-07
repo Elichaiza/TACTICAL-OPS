@@ -1593,26 +1593,23 @@ function AppInner() {
       {activeTab==="datatable"  && <DataTableTab dep={currentDep} />}
       {activeTab==="myshift"    && <MyShiftTab dep={currentDep} currentUser={currentUser} users={users} saveUsers={saveUsers} notify={notify} />}
       {activeTab==="users"      && <UsersTab users={users} saveUsers={saveUsers} currentUser={currentUser} dep={currentDep} notify={notify} />}
-     </div> </div> )}
-   {['soldiers','missions','attendance','assignment','users'].includes(activeTab) && currentDep && (
-    <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:200,
-     background:'linear-gradient(to top,#060a12 70%,transparent)',
-     padding:'20px 24px 16px',display:'flex',justifyContent:'center',direction:'ltr'}}>
-     <button onClick={forceSaveToCloud} disabled={cloudSyncStatus==='saving'}
-      style={{display:'flex',alignItems:'center',gap:8,
-       padding:'11px 32px',borderRadius:12,fontSize:15,fontWeight:700,cursor:'pointer',
-       border:`2px solid ${cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#3b82f6'}`,
-       background: cloudSyncStatus==='ok'?'#052e16':cloudSyncStatus==='err'?'#150707':'#0d1f3c',
-       color:  cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#93c5fd',
-       boxShadow:'0 0 20px rgba(59,130,246,0.2)',
-       transition:'all .3s',opacity:cloudSyncStatus==='saving'?0.6:1}}>
-      {cloudSyncStatus==='saving' ? '⏳ שומר...'
-       : cloudSyncStatus==='ok'   ? '✓ נשמר ב-Supabase'
-       : cloudSyncStatus==='err'  ? '✗ שגיאת שמירה'
-       : '☁ שמור ל-Supabase'}
-     </button>
-    </div>
-   )}
+     </div>
+     {['soldiers','missions','attendance','assignment','users'].includes(activeTab) && (
+      <div style={{padding:'24px 0 8px',display:'flex',justifyContent:'center'}}>
+       <button onClick={forceSaveToCloud} disabled={cloudSyncStatus==='saving'}
+        style={{padding:'12px 36px',borderRadius:12,fontSize:15,fontWeight:700,cursor:'pointer',
+         border:`2px solid ${cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#3b82f6'}`,
+         background:cloudSyncStatus==='ok'?'#052e16':cloudSyncStatus==='err'?'#150707':'#0d1f3c',
+         color:cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#93c5fd',
+         opacity:cloudSyncStatus==='saving'?0.6:1,transition:'all .3s'}}>
+        {cloudSyncStatus==='saving'?'⏳ שומר...'
+         :cloudSyncStatus==='ok'  ?'✓ נשמר ב-Supabase'
+         :cloudSyncStatus==='err' ?'✗ שגיאת שמירה'
+         :'☁ שמור ל-Supabase'}
+       </button>
+      </div>
+     )}
+    </div> )}
    {profileOpen && (
     <ProfileModal
      currentUser={currentUser}
