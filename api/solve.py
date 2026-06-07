@@ -23,6 +23,30 @@ def _conflict(a, b):
     return gap < MIN_REST
 
 
+def _add_daily_limits(model, soldiers, slots, x):
+    """מכסת 8ש' לכל חלון יממה צבאית (10:00→10:00).
+    סופר את החפיפה האמיתית של כל משמרת עם כל חלון — כולל משמרות
+    שחוצות את גבול ה-10:00 (מתפצלות בין שני חלונות)."""
+    # חלונות מתחילים ב-10:00 (=600 דק') כל 1440 דק'
+    starts = set()
+    for sl in slots:
+        k = (sl["startAbs"] - 600) // 1440
+        starts.update((k - 1, k, k + 1))
+    for s in soldiers:
+        sid = s["id"]
+        for k in starts:
+            ws = 600 + k * 1440
+            terms = []
+            for sl in slots:
+                if (sl["key"], sid) not in x:
+                    continue
+                ov = min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)
+                if ov > 0:
+                    terms.append(ov * x[(sl["key"], sid)])
+            if terms:
+                model.Add(sum(terms) <= MAX_DAILY)
+
+
 def _attempt(problem, use_cap=True, time_limit=9.0):
     """ניסיון פתרון יחיד. use_cap=True מוסיף תקרת שעות הדוקה לאיזון מהיר.
     מחזיר: dict פתרון | {"structural": reasons} | None (אין פתרון בזמן/עם תקרה)."""
@@ -83,16 +107,8 @@ def _attempt(problem, use_cap=True, time_limit=9.0):
                 for sid in common:
                     model.Add(x[(slots[i]["key"], sid)] + x[(slots[j]["key"], sid)] <= 1)
 
-    # ── אילוץ קשיח: מכסה יומית 8ש' ביממה צבאית ──
-    by_milday = defaultdict(list)
-    for sl in slots:
-        by_milday[sl["milDay"]].append(sl)
-    for s in soldiers:
-        sid = s["id"]
-        for _, sls in by_milday.items():
-            terms = [sl["dur"] * x[(sl["key"], sid)] for sl in sls if (sl["key"], sid) in x]
-            if terms:
-                model.Add(sum(terms) <= MAX_DAILY)
+    # ── אילוץ קשיח: מכסה יומית 8ש' לכל חלון יממה צבאית (עם פיצול נכון) ──
+    _add_daily_limits(model, soldiers, slots, x)
 
     # אם זוהתה אי-היתכנות מבנית ודאית — החזר מיד (לא תלוי בתקרה)
     if infeasible_reasons:
@@ -222,15 +238,7 @@ def _relaxed_diagnose(problem):
                 for sid in set(slots[i]["eligible"]) & set(slots[j]["eligible"]):
                     model.Add(x[(slots[i]["key"], sid)] + x[(slots[j]["key"], sid)] <= 1)
 
-    by_milday = defaultdict(list)
-    for sl in slots:
-        by_milday[sl["milDay"]].append(sl)
-    for s in soldiers:
-        sid = s["id"]
-        for _, sls in by_milday.items():
-            terms = [sl["dur"] * x[(sl["key"], sid)] for sl in sls if (sl["key"], sid) in x]
-            if terms:
-                model.Add(sum(terms) <= MAX_DAILY)
+    _add_daily_limits(model, soldiers, slots, x)
 
     model.Maximize(sum(x.values()))
     solver = cp_model.CpSolver()
