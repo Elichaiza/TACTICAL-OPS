@@ -1310,14 +1310,27 @@ function buildAssignmentV2(missions, soldiers, fullAtt, pinnedAssignments = {}) 
   }
   return pool;
  }
- /* דירוג: גיוון → פחות שעות → פחות משמרות → round-robin */
+ /* דירוג: גיוון → פחות שעות → פחות משמרות → פחות אפשרויות עתידיות → round-robin */
  function rankCandidates(pool, slot) {
+  /* חשב כמה סלוטים פתוחים נוספים יש לכל מועמד (ללא חפיפה זמן) */
+  const futureOpts = {};
+  for (const s of pool) {
+   let cnt = 0;
+   const bs = state[s.id].busySlots;
+   for (const sl of allSlots) {
+    if (sl === slot || sl.assignedIds.has(s.id) || sl.assigned.length >= sl.needed) continue;
+    if (!bs.some(b => b.s < sl.endAbs && sl.startAbs < b.e)) cnt++;
+   }
+   futureOpts[s.id] = cnt;
+  }
   return pool.slice().sort((a, b) => {
    const aV = state[a.id].lastMissionId === slot.missionId ? 1 : 0;
    const bV = state[b.id].lastMissionId === slot.missionId ? 1 : 0;
    if (aV !== bV) return aV - bV;
    if (state[a.id].totalMins !== state[b.id].totalMins) return state[a.id].totalMins - state[b.id].totalMins;
    if (state[a.id].shiftCount !== state[b.id].shiftCount) return state[a.id].shiftCount - state[b.id].shiftCount;
+   /* חייל עם פחות אפשרויות עתידיות מקבל עדיפות — נמנע ממצב שנשאר ללא סלוטים */
+   if (futureOpts[a.id] !== futureOpts[b.id]) return futureOpts[a.id] - futureOpts[b.id];
    return state[a.id].idx - state[b.id].idx;
   });
  }
