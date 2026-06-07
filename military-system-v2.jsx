@@ -1568,6 +1568,14 @@ function AppInner() {
        style={{...S.logoutBtn,borderColor:"#1e3a5f",color:"#93c5fd",display:"flex",alignItems:"center",gap:5}}>
        👤 <span style={{maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{currentUser?.name}</span>
       </button>
+      <button onClick={forceSaveToCloud} disabled={cloudSyncStatus==='saving'}
+       title="שמור הכל ל-Supabase עכשיו"
+       style={{...S.logoutBtn,
+        borderColor: cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#1e3a5f',
+        color:       cloudSyncStatus==='ok'?'#4ade80':cloudSyncStatus==='err'?'#f87171':'#60a5fa',
+        minWidth:50, transition:'color .3s,border-color .3s'}}>
+       {cloudSyncStatus==='saving'?'⏳':cloudSyncStatus==='ok'?'✓ נשמר':cloudSyncStatus==='err'?'✗ שגיאה':'☁ שמור'}
+      </button>
       <button onClick={handleLogout} style={S.logoutBtn}>יציאה →</button> </div> </div> </header>
    {!currentDep ? (
     <EmptyState onNew={async name => {
