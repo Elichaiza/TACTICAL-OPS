@@ -4,6 +4,7 @@
 # ============================================================
 from http.server import BaseHTTPRequestHandler
 from collections import defaultdict
+from datetime import date, timedelta
 from math import gcd, ceil
 import json
 
@@ -261,29 +262,78 @@ def _relaxed_diagnose(problem):
                 holes.append({"slot": sl["key"], "missionId": sl["missionId"],
                               "have": got, "need": sl["needed"], "cause": cause})
 
-    # ── ניתוח כולל: ביקוש מול קיבולת זמינה ──
-    demand = sum(sl["dur"] * sl["needed"] for sl in slots)
-    # קיבולת = לכל חייל, 8ש' × מספר חלונות-יממה שבהם הוא זכאי למשהו
-    win_of = {}
-    for sl in slots:
-        win_of[sl["key"]] = (sl["startAbs"] - 600) // 1440
-    sol_windows = {}
-    for sl in slots:
-        for sid in sl["eligible"]:
-            sol_windows.setdefault(sid, set()).add(win_of[sl["key"]])
-            # משמרת שחוצה גבול 10:00 נוגעת גם בחלון הבא
-            if (sl["endAbs"] - 600) // 1440 != win_of[sl["key"]]:
-                sol_windows[sid].add((sl["endAbs"] - 600) // 1440)
-    capacity = sum(len(w) * MAX_DAILY for w in sol_windows.values())
-
-    summary = {
-        "demand_hours": round(demand / 60, 1),
-        "capacity_hours": round(capacity / 60, 1),
-        "shortfall_hours": round(max(0, demand - capacity) / 60, 1),
-        "present_soldiers": len(sol_windows),
-        "unfilled_shifts": len(holes),
-    }
+    summary = _diagnose_summary(problem, holes)
     return {"feasible": False, "reasons": [{"type": "holes", "holes": holes}], "summary": summary}
+
+
+def _date_from_k(k):
+    """חלון k → תאריך היממה הצבאית (ISO)."""
+    base = date(2000, 1, 1) + timedelta(days=int(k))
+    return base.isoformat()
+
+
+def _diagnose_summary(problem, holes):
+    """ניתוח צווארי בקבוק: לפי יממה (כוח אדם) ולפי תפקיד חובה."""
+    soldiers = problem["soldiers"]
+    slots = problem["slots"]
+    role_of = {s["id"]: s["role"] for s in soldiers}
+
+    demand = sum(sl["dur"] * sl["needed"] for sl in slots)
+
+    # כל חלונות היממה שהמשמרות נוגעות בהם
+    windows = set()
+    for sl in slots:
+        windows.add((sl["startAbs"] - 600) // 1440)
+        windows.add((sl["endAbs"] - 1 - 600) // 1440)
+
+    # ── צוואר בקבוק לפי יממה: ביקוש שעות מול קיבולת חיילים×8ש' ──
+    day_bottlenecks = []
+    for k in windows:
+        ws = 600 + k * 1440
+        dem = 0
+        present = set()
+        for sl in slots:
+            ov = min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)
+            if ov > 0:
+                dem += ov * sl["needed"]
+                present.update(sl["eligible"])
+        cap = len(present) * MAX_DAILY
+        if dem > cap:
+            day_bottlenecks.append({
+                "date": _date_from_k(k),
+                "demand_hours": round(dem / 60, 1),
+                "capacity_hours": round(cap / 60, 1),
+                "soldiers": len(present),
+            })
+
+    # ── צוואר בקבוק לפי תפקיד חובה: משמרות הדורשות תפקיד מול בעלי התפקיד ──
+    role_shortages = []
+    mand_roles = set(r for sl in slots for r in sl.get("mandatory", []))
+    for r in mand_roles:
+        for k in windows:
+            ws = 600 + k * 1440
+            need_shifts = 0
+            avail = set()
+            for sl in slots:
+                if r not in sl.get("mandatory", []):
+                    continue
+                ov = min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)
+                if ov > 0:
+                    need_shifts += 1
+                    avail.update(sid for sid in sl["eligible"] if role_of.get(sid) == r)
+            if need_shifts > len(avail):
+                role_shortages.append({
+                    "role": r, "date": _date_from_k(k),
+                    "need": need_shifts, "have": len(avail),
+                })
+
+    return {
+        "demand_hours": round(demand / 60, 1),
+        "present_soldiers": len(set(sid for sl in slots for sid in sl["eligible"])),
+        "unfilled_shifts": len(holes),
+        "day_bottlenecks": day_bottlenecks,
+        "role_shortages": role_shortages,
+    }
 
 
 class handler(BaseHTTPRequestHandler):
