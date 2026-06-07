@@ -97,11 +97,14 @@ def solve(problem):
 
     # ── עומס שעות לכל חייל ──
     total_demand = sum(sl["dur"] * sl["needed"] for sl in slots)
+    # חסם הדוק על עומס: לא יותר מ-8ש' לכל יממה צבאית (מאיץ את הכפל)
+    num_mildays = len(set(sl["milDay"] for sl in slots))
+    max_load = min(total_demand, num_mildays * MAX_DAILY)
     load = {}
     for s in soldiers:
         sid = s["id"]
         terms = [sl["dur"] * x[(sl["key"], sid)] for sl in slots if (sl["key"], sid) in x]
-        lv = model.NewIntVar(0, total_demand, f"load_{sid}")
+        lv = model.NewIntVar(0, max_load, f"load_{sid}")
         model.Add(lv == (sum(terms) if terms else 0))
         load[sid] = lv
 
@@ -111,10 +114,10 @@ def solve(problem):
     sq_terms = []
     for s in soldiers:
         sid = s["id"]
-        sqv = model.NewIntVar(0, total_demand * total_demand, f"sq_{sid}")
+        sqv = model.NewIntVar(0, max_load * max_load, f"sq_{sid}")
         model.AddMultiplicationEquality(sqv, [load[sid], load[sid]])
         sq_terms.append(sqv)
-    sum_sq = model.NewIntVar(0, total_demand * total_demand * max(1, len(soldiers)), "sum_sq")
+    sum_sq = model.NewIntVar(0, max_load * max_load * max(1, len(soldiers)), "sum_sq")
     model.Add(sum_sq == sum(sq_terms))
 
     # ── מטרה רכה #2: רוטציה — קנס על אותה משימה יותר מפעם ──
@@ -136,7 +139,7 @@ def solve(problem):
     model.Minimize(sum_sq * 10000 + rot)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 8.0   # מתחת למגבלת Vercel Hobby (10ש')
+    solver.parameters.max_time_in_seconds = 9.0   # מתחת למגבלת Vercel (10ש')
     solver.parameters.num_search_workers = 8
     status = solver.Solve(model)
 
