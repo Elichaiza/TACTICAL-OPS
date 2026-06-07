@@ -2837,6 +2837,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [pinnedAssignments, setPinnedAssignments] = useState({});
  const [feasIssues, setFeasIssues] = useState([]);
  const [showWarning, setShowWarning] = useState(false);
+ const [feasSummary, setFeasSummary] = useState(null);
  const printRef = useRef();
  const att = dep.attendance||{};
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
