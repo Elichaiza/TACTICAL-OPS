@@ -2861,18 +2861,26 @@ function AssignmentTab({ dep, updateDep, notify }) {
      ? `שיבוץ אופטימלי! פער שעות: ${Math.round((out.spread||0)/60*10)/10}ש'`
      : `שיבוץ נמצא (פער: ${Math.round((out.spread||0)/60*10)/10}ש')`, 'success');
    } else {
-    // אי-היתכנות שזוהתה ע"י הסולבר — הצג סיבות
+    // אי-היתכנות שזוהתה ע"י הסולבר — הצג סיבות מפורטות
     const reasons = out.reasons || [];
     const holes = reasons.find(r => r.type === 'holes');
-    if (holes) {
+    const CAUSE = {
+     no_eligible:      'אין אף חייל נוכח/מוסמך למשמרת זו',
+     too_few_eligible: 'פחות חיילים זכאים מהנדרש',
+     manpower:         'אין מספיק כוח אדם — החיילים הזמינים כבר תפוסים (מנוחה/מכסה יומית)',
+    };
+    if (holes && holes.holes.length) {
      const issues = holes.holes.map(h => {
       const m = missions.find(mm => mm.id === h.missionId);
       const si = parseInt(h.slot.split('__')[1], 10);
       const sh = m ? computeMissionShifts(m)[si] : null;
-      return { type:'few_soldiers', mission: m?.name || h.missionId,
-               shift: (si+1), date: sh?.startDate || '', have: h.have, need: h.need };
+      return { type:'hole', mission: m?.name || h.missionId,
+               shift: (si+1), date: sh?.startDate || '',
+               time: sh ? `${sh.start}–${sh.end}` : '',
+               have: h.have, need: h.need,
+               cause: CAUSE[h.cause] || 'לא ניתן למלא' };
      });
-     setFeasIssues(issues); setShowWarning(true);
+     setFeasIssues(issues); setFeasSummary(out.summary || null); setShowWarning(true);
     } else {
      notify('לא נמצא שיבוץ חוקי — בדוק דרישות המשימות', 'error');
     }
