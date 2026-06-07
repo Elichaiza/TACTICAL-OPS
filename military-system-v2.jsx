@@ -115,8 +115,8 @@ function computeMissionShifts(f) {
   shifts.push({
    start:      minsToTime(startM + so),
    end:        minsToTime(startM + eo),
-   startDate:  addDays(f.startDate, Math.floor(so/1440)),
-   endDate:    addDays(f.startDate, Math.floor(eo/1440)),
+   startDate:  addDays(f.startDate, Math.floor((startM + so) / 1440)),
+   endDate:    addDays(f.startDate, Math.floor((startM + eo) / 1440)),
    dayNum:        Math.floor(so/1440) + 1,
    shiftOfDay:    (i % n) + 1,
    startOffsetMins: so,
