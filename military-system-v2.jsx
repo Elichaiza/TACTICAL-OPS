@@ -3085,7 +3085,7 @@ function UsersTab({ users, saveUsers, currentUser, dep, notify }) {
  const [inviteRole, setInviteRole] = useState("viewer");
  const [copied, setCopied]     = useState(false);
  useEffect(() => {
-  sGet("tac:invite", true).then(v => v && setInvite(v)).catch(()=>{});
+  const saved = lsGet("tac:invite"); if (saved) setInvite(saved);
  }, []);
  const inviteUrl = invite
   ? `${window.location.origin}${window.location.pathname}?invite=${invite.token}`
