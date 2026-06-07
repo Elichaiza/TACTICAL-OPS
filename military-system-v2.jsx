@@ -3180,23 +3180,59 @@ function AssignmentTab({ dep, updateDep, notify }) {
    {/* מודל אזהרת היתכנות */}
    {showWarning && (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-     <div style={{background:"#0d1117",border:"1px solid #f87171",borderRadius:14,padding:28,maxWidth:540,width:"100%",direction:"rtl"}}>
-      <div style={{fontSize:20,fontWeight:700,color:"#f87171",marginBottom:16}}>⚠ נמצאו בעיות בנתונים</div>
-      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20,maxHeight:300,overflowY:"auto"}}>
+     <div style={{background:"#0d1117",border:"1px solid #f87171",borderRadius:14,padding:28,maxWidth:560,width:"100%",direction:"rtl"}}>
+      <div style={{fontSize:20,fontWeight:700,color:"#f87171",marginBottom:6}}>
+       {warnMode==="infeasible" ? "✗ לא ניתן לשבץ את כל המשימות" : "⚠ נמצאו בעיות בנתונים"}
+      </div>
+      <div style={{fontSize:13,color:"#94a3b8",marginBottom:16}}>
+       {warnMode==="infeasible"
+        ? "המנוע לא הצליח למלא את כל המשמרות תחת החוקים (מנוחה 8ש' · מקסימום 8ש'/יממה). להלן הסיבות:"
+        : "לפני יצירת השיבוץ — שים לב לנקודות הבאות:"}
+      </div>
+      {feasSummary && (
+       <div style={{background:"#1a1207",border:"1px solid #b45309",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:13,color:"#fbbf24"}}>
+        <div style={{fontWeight:700,marginBottom:6}}>📊 ניתוח כוח אדם</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"4px 18px",color:"#e2e8f0"}}>
+         <span>נדרש: <strong>{feasSummary.demand_hours}ש'</strong></span>
+         <span>זמין: <strong>{feasSummary.capacity_hours}ש'</strong></span>
+         {feasSummary.shortfall_hours>0 &&
+          <span style={{color:"#f87171"}}>חוסר: <strong>{feasSummary.shortfall_hours}ש'</strong></span>}
+         <span>חיילים נוכחים: <strong>{feasSummary.present_soldiers}</strong></span>
+        </div>
+        {feasSummary.shortfall_hours>0 && (
+         <div style={{marginTop:8,color:"#fca5a5",fontSize:12}}>
+          ⚠ אין מספיק כוח אדם — חסרות כ-{feasSummary.shortfall_hours} שעות-חייל. הוסף חיילים או הפחת משמרות.
+         </div>)}
+       </div>
+      )}
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20,maxHeight:280,overflowY:"auto"}}>
        {feasIssues.map((iss,i)=>(
         <div key={i} style={{background:"#150707",border:"1px solid #7f1d1d",borderRadius:8,padding:"8px 12px",fontSize:12}}>
          {iss.type==="no_attendance" && <><span style={{color:"#f87171"}}>📋 אין נוכחות</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)})</span></>}
          {iss.type==="few_soldiers" && <><span style={{color:"#fbbf24"}}>👥 חסרים חיילים</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)}): יש {iss.have}, צריך {iss.need}</span></>}
          {iss.type==="missing_cert"  && <><span style={{color:"#fb923c"}}>🏅 הסמכה חסרה</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)}): {iss.item}</span></>}
          {iss.type==="missing_role"  && <><span style={{color:"#c4b5fd"}}>🎖 תפקיד חסר</span><span style={{color:"#94a3b8"}}> — {iss.mission}, משמרת {iss.shift} ({fmtDate(iss.date)}): {iss.item}</span></>}
+         {iss.type==="hole" && <>
+          <div><span style={{color:"#f87171",fontWeight:700}}>✗ {iss.mission}</span>
+           <span style={{color:"#94a3b8"}}> — משמרת {iss.shift} {iss.time} ({fmtDate(iss.date)}): שובצו {iss.have}/{iss.need}</span></div>
+          <div style={{color:"#fca5a5",fontSize:11,marginTop:3}}>↳ {iss.cause}</div>
+         </>}
         </div>
        ))}
       </div>
-      <div style={{color:"#64748b",fontSize:13,marginBottom:20}}>האם להמשיך בשיבוץ בכל זאת? ייתכן שחלק מהמשמרות לא יתמלאו.</div>
-      <div style={{display:"flex",gap:10}}>
-       <button onClick={()=>run(true)} style={{...S.btnPrimary,flex:1}}>המשך בכל זאת</button>
-       <button onClick={()=>setShowWarning(false)} style={{...S.btnGhost,flex:1}}>בטל</button>
-      </div>
+      {warnMode==="infeasible" ? (
+       <div style={{display:"flex",gap:10}}>
+        <button onClick={()=>setShowWarning(false)} style={{...S.btnPrimary,flex:1}}>הבנתי</button>
+       </div>
+      ) : (
+       <>
+        <div style={{color:"#64748b",fontSize:13,marginBottom:20}}>האם להמשיך בשיבוץ בכל זאת? ייתכן שחלק מהמשמרות לא יתמלאו.</div>
+        <div style={{display:"flex",gap:10}}>
+         <button onClick={()=>run(true)} style={{...S.btnPrimary,flex:1}}>המשך בכל זאת</button>
+         <button onClick={()=>setShowWarning(false)} style={{...S.btnGhost,flex:1}}>בטל</button>
+        </div>
+       </>
+      )}
      </div>
     </div>
    )}
