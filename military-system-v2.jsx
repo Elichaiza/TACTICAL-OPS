@@ -1389,18 +1389,29 @@ function AppInner() {
   setTimeout(() => setNotification(null), 3500); };
  useEffect(() => {
   (async () => {
-   // Load everything from Supabase (primary source of truth)
+   // 1. Supabase ראשון (מקור אמת, מסנכרן בין מכשירים)
    let [cloudDeps, cloudUsers] = await Promise.all([
     loadDeploymentsFromDb(),
     loadUsersFromDb(),
    ]);
-   // Seed Supabase on first run if empty
+   // 2. אם Supabase נכשל/ריק — localStorage כגיבוי
    if (!cloudDeps || cloudDeps.length === 0) {
-    await syncDeploymentsToDb(seedData.deployments);
+    const local = lsGet("tac:deployments");
+    if (local && local.length > 0) cloudDeps = local;
+   }
+   if (!cloudUsers || cloudUsers.length === 0) {
+    const local = lsGet("tac:users");
+    if (local && local.length > 0) cloudUsers = local;
+   }
+   // 3. עדיין ריק — הרצה ראשונה, שתל נתוני seed
+   if (!cloudDeps || cloudDeps.length === 0) {
+    syncDeploymentsToDb(seedData.deployments).catch(()=>{});
+    lsSet("tac:deployments", seedData.deployments);
     cloudDeps = seedData.deployments;
    }
    if (!cloudUsers || cloudUsers.length === 0) {
-    await syncUsersToDb(seedData.users);
+    syncUsersToDb(seedData.users).catch(()=>{});
+    lsSet("tac:users", seedData.users);
     cloudUsers = seedData.users;
    }
    if (cloudDeps)  setDeployments(cloudDeps);
