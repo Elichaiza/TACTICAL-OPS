@@ -2903,12 +2903,12 @@ function AssignmentTab({ dep, updateDep, notify }) {
                     time: inf.time, have: 0, need: 0, cause: 'אין מספיק בעלי תפקיד מיוחד' });
      }
     }
-    if (issues.length) {
-     setFeasIssues(issues); setFeasSummary(out.summary || null);
-     setFeasPartial(out.partialResult || null); setShowWarning(true);
-    } else {
-     notify('לא נמצא שיבוץ חוקי — בדוק דרישות המשימות', 'error');
-    }
+    // תמיד הצג את המודל עם האפשרויות (חלקי / מילוי כפוי), גם אם אין פירוט ספציפי
+    setFeasIssues(issues);
+    setFeasSummary(out.summary || null);
+    setFeasPartial(out.partialResult || null);
+    setShowWarning(true);
+    if (out.error) console.error('Solver error:', out.error);
    }
   } catch(e) {
    // ה-backend לא זמין — fallback מקומי
