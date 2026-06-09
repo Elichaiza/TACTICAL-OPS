@@ -24,31 +24,32 @@ def _conflict(a, b):
     return gap < MIN_REST
 
 
-def _quota_key(sl):
-    """ליום-המכסה של משמרת: אם היא חוצה את גבול 10:00 — *כל* המשמרת נספרת ליממה
-    שאליה היא נכנסת (לא מתפצלת). אחרת — היממה שמכילה אותה. (10:00 = 600 דק')."""
+def _quota_key(sl, boundary=600):
+    """ליום-המכסה של משמרת: אם היא חוצה את גבול היממה — *כל* המשמרת נספרת ליממה
+    שאליה היא נכנסת (לא מתפצלת). אחרת — היממה שמכילה אותה.
+    boundary = שעת תחילת היממה הצבאית בדקות (10:00 = 600, ברירת מחדל)."""
     s, e = sl["startAbs"], sl["endAbs"]
-    k = (s - 600) // 1440
-    nb = 600 + (k + 1) * 1440      # גבול 10:00 הבא אחרי תחילת המשמרת
-    if s < nb < e:                 # המשמרת חוצה את ה-10:00
-        return nb                  # נספרת במלואה ליממה שמתחילה ב-nb
-    return 600 + k * 1440          # היממה שמכילה את המשמרת
+    k = (s - boundary) // 1440
+    nb = boundary + (k + 1) * 1440  # גבול היממה הבא אחרי תחילת המשמרת
+    if s < nb < e:                  # המשמרת חוצה את הגבול
+        return nb                   # נספרת במלואה ליממה שמתחילה ב-nb
+    return boundary + k * 1440      # היממה שמכילה את המשמרת
 
 
-def _soldier_quota_groups(slots, x, sid):
+def _soldier_quota_groups(slots, x, sid, boundary=600):
     """מקבץ את משמרות החייל לפי יום-מכסה → [איברי משך]."""
     groups = {}
     for sl in slots:
         if (sl["key"], sid) not in x:
             continue
-        groups.setdefault(_quota_key(sl), []).append(sl["dur"] * x[(sl["key"], sid)])
+        groups.setdefault(_quota_key(sl, boundary), []).append(sl["dur"] * x[(sl["key"], sid)])
     return groups
 
 
-def _add_daily_limits(model, soldiers, slots, x):
-    """מכסת 8ש' ליממה צבאית — משמרת שחוצה 10:00 נספרת במלואה ליום שאליו נכנסה."""
+def _add_daily_limits(model, soldiers, slots, x, boundary=600):
+    """מכסת 8ש' ליממה צבאית — משמרת שחוצה הגבול נספרת במלואה ליום שאליו נכנסה."""
     for s in soldiers:
-        for terms in _soldier_quota_groups(slots, x, s["id"]).values():
+        for terms in _soldier_quota_groups(slots, x, s["id"], boundary).values():
             if terms:
                 model.Add(sum(terms) <= MAX_DAILY)
 
@@ -60,6 +61,7 @@ def _attempt(problem, use_cap=True, optimize=True, time_limit=9.0):
     soldiers = problem["soldiers"]   # [{id, role}]
     slots = problem["slots"]         # ראה build בצד הלקוח
     role_of = {s["id"]: s["role"] for s in soldiers}
+    boundary = problem.get("dayStartMin", 600)
 
     model = cp_model.CpModel()
 
@@ -115,7 +117,7 @@ def _attempt(problem, use_cap=True, optimize=True, time_limit=9.0):
                     model.Add(x[(slots[i]["key"], sid)] + x[(slots[j]["key"], sid)] <= 1)
 
     # ── אילוץ קשיח: מכסה יומית 8ש' לכל חלון יממה צבאית (עם פיצול נכון) ──
-    _add_daily_limits(model, soldiers, slots, x)
+    _add_daily_limits(model, soldiers, slots, x, boundary)
 
     # אם זוהתה אי-היתכנות מבנית ודאית — החזר מיד (לא תלוי בתקרה)
     if infeasible_reasons:
@@ -191,6 +193,7 @@ def _scan_violations(problem, assign):
     """סורק שיבוץ ומחזיר רשימת הפרות חוק קריאות."""
     slots = {sl["key"]: sl for sl in problem["slots"]}
     role_of = {s["id"]: s["role"] for s in problem["soldiers"]}
+    boundary = problem.get("dayStartMin", 600)
     per = {}
     for k, ids in assign.items():
         for sid in ids:
@@ -206,12 +209,12 @@ def _scan_violations(problem, assign):
                               "slotA": ss[i]["key"], "slotB": ss[j]["key"], "gap": gap})
         day_tot = {}
         for sl in sls:
-            qk = _quota_key(sl)
+            qk = _quota_key(sl, boundary)
             day_tot[qk] = day_tot.get(qk, 0) + sl["dur"]
         for qk, tot in day_tot.items():
             if tot > MAX_DAILY:
                 V.append({"type": "daily", "soldier": sid,
-                          "date": _date_from_k((qk - 600) // 1440), "minutes": tot})
+                          "date": _date_from_k((qk - boundary) // 1440), "minutes": tot})
     for k, sl in slots.items():
         got = assign.get(k, [])
         if len(got) < sl["needed"]:
@@ -233,6 +236,7 @@ def _attempt_force(problem, time_limit=7.0, balance=False, hard_safety=False):
     soldiers = problem["soldiers"]
     slots = problem["slots"]
     role_of = {s["id"]: s["role"] for s in soldiers}
+    boundary = problem.get("dayStartMin", 600)
     model = cp_model.CpModel()
     x = {}
     for sl in slots:
@@ -275,9 +279,9 @@ def _attempt_force(problem, time_limit=7.0, balance=False, hard_safety=False):
                         v = model.NewBoolVar(f"rest_{a['key']}_{b['key']}_{sid}")
                         model.Add(v >= x[(a["key"], sid)] + x[(b["key"], sid)] - 1)
                         pen.append(v * 100)
-    # מכסה יומית — משמרת שחוצה 10:00 נספרת במלואה ליום שאליו נכנסה (_quota_key)
+    # מכסה יומית — משמרת שחוצה הגבול נספרת במלואה ליום שאליו נכנסה (_quota_key)
     for s in soldiers:
-        for qi, terms in enumerate(_soldier_quota_groups(slots, x, s["id"]).values()):
+        for qi, terms in enumerate(_soldier_quota_groups(slots, x, s["id"], boundary).values()):
             if not terms:
                 continue
             if hard_safety:
@@ -410,6 +414,7 @@ def _relaxed_diagnose(problem):
     soldiers = problem["soldiers"]
     slots = problem["slots"]
     role_of = {s["id"]: s["role"] for s in soldiers}
+    boundary = problem.get("dayStartMin", 600)
 
     model = cp_model.CpModel()
     x = {}
@@ -429,7 +434,7 @@ def _relaxed_diagnose(problem):
                 for sid in set(slots[i]["eligible"]) & set(slots[j]["eligible"]):
                     model.Add(x[(slots[i]["key"], sid)] + x[(slots[j]["key"], sid)] <= 1)
 
-    _add_daily_limits(model, soldiers, slots, x)
+    _add_daily_limits(model, soldiers, slots, x, boundary)
 
     model.Maximize(sum(x.values()))
     solver = cp_model.CpSolver()
@@ -469,19 +474,20 @@ def _diagnose_summary(problem, holes):
     soldiers = problem["soldiers"]
     slots = problem["slots"]
     role_of = {s["id"]: s["role"] for s in soldiers}
+    boundary = problem.get("dayStartMin", 600)
 
     demand = sum(sl["dur"] * sl["needed"] for sl in slots)
 
     # כל חלונות היממה שהמשמרות נוגעות בהם
     windows = set()
     for sl in slots:
-        windows.add((sl["startAbs"] - 600) // 1440)
-        windows.add((sl["endAbs"] - 1 - 600) // 1440)
+        windows.add((sl["startAbs"] - boundary) // 1440)
+        windows.add((sl["endAbs"] - 1 - boundary) // 1440)
 
     # ── צוואר בקבוק לפי יממה: ביקוש שעות מול קיבולת חיילים×8ש' ──
     day_bottlenecks = []
     for k in windows:
-        ws = 600 + k * 1440
+        ws = boundary + k * 1440
         dem = 0
         present = set()
         for sl in slots:
@@ -503,7 +509,7 @@ def _diagnose_summary(problem, holes):
     mand_roles = set(r for sl in slots for r in sl.get("mandatory", []))
     for r in mand_roles:
         for k in windows:
-            ws = 600 + k * 1440
+            ws = boundary + k * 1440
             need_shifts = 0
             avail = set()
             for sl in slots:
