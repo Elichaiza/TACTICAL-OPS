@@ -1527,12 +1527,12 @@ function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {},
  });
  return {
   soldiers: soldiers.map(s => ({ id: s.id, role: s.role })),
-  slots, forced,
+  slots, forced, dayStartMin,
  };
 }
 /* קורא ל-backend ומחזיר { result | infeasible }. mode='force' = מילוי כפוי */
-async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = {}, mode = null) {
- const problem = buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments);
+async function solveViaBackend(missions, soldiers, fullAtt, pinnedAssignments = {}, mode = null, dayStartMin = 600) {
+ const problem = buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments, dayStartMin);
  if (mode) problem.mode = mode;
  const resp = await fetch('/api/solve', {
   method: 'POST',
