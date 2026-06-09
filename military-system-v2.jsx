@@ -3053,6 +3053,12 @@ function AssignmentTab({ dep, updateDep, notify }) {
   notify(`פוצלו ${splitList.length} משמרות חילופים — משבץ מחדש...`, 'success');
   await run(missions);                                                // שיבוץ מיידי עם הפיצול
  }
+ /* ביטול כל פיצולי החילופים במשימות הנבחרות (חזרה למשמרות המקוריות) */
+ function clearSplits() {
+  updateDep(d => ({ ...d, missions: d.missions.map(m =>
+   (selMissions.includes(m.id) && m.shiftSplits?.length) ? { ...m, shiftSplits: [] } : m) }));
+  notify('פיצולי החילופים בוטלו — המשמרות חזרו למקוריות', 'success');
+ }
  /* מילוי כפוי — ממלא הכל גם במחיר חריגה מהחוקים, ומדווח על ההפרות */
  async function runForce() {
   const missions = dep.missions.filter(m=>selMissions.includes(m.id));
