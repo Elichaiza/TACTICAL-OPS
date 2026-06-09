@@ -2873,6 +2873,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [forceViolations, setForceViolations] = useState(null); // הפרות במילוי כפוי
  const printRef = useRef();
  const att = dep.attendance||{};
+ const dayStartMin = timeToMins(dep.dayStart || '10:00');
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
  const presentSoldiers = dep.soldiers.filter(s=>getAttStatus((att[selDate]||{})[s.id])==="present");
  /* תרגום הפרות חוק לטקסט קריא */
