@@ -2744,8 +2744,8 @@ function AttendanceTab({ dep, updateDep, notify }) {
         const val    = rec[s.id];
         const status = getAttStatus(val);
         const note   = getAttField(val,"note","");
-        const from   = getAttField(val,"from","10:00");
-        const to     = getAttField(val,"to","10:00");
+        const from   = getAttField(val,"from",dayStart);
+        const to     = getAttField(val,"to",dayStart);
         return (
          <tr key={s.id} style={{
           ...S.tr,...(i%2===0?S.trAlt:{}),
