@@ -3103,6 +3103,8 @@ function AssignmentTab({ dep, updateDep, notify }) {
   });
  });
  const maxMins = Math.max(1,...Object.values(loadStats).map(x=>x.mins));
+ // כל החיילים שקיבלו שיבוץ (כולל כאלה שנוכחים רק בימים אחרים, לא רק selDate)
+ const loadSoldiers = dep.soldiers.filter(s=>loadStats[s.id]);
  return (
   <div>
    <PanelHeader title="שיבוץ חכם" icon="⚔️">
