@@ -3322,14 +3322,22 @@ function AssignmentTab({ dep, updateDep, notify }) {
          const ms = dep.missions.filter(m=>selMissions.includes(m.id));
          const prob = buildSolverProblem(ms, dep.soldiers, att, pinnedAssignments);
          const SP = new Set(["סמל","מפקד","מפקד משימה","קצין"]);
-         const roleOf = Object.fromEntries(prob.soldiers.map(s=>[s.id,s.role]));
+         const byId = Object.fromEntries(dep.soldiers.map(s=>[s.id,s]));
+         const reqCertsOf = Object.fromEntries(ms.map(m=>[m.id, m.requiredCerts||[]]));
+         const hhmm = abs=>{const m=((abs%1440)+1440)%1440;return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
          const txt = JSON.stringify({
-           slots: prob.slots.map(s=>({key:s.key,startAbs:s.startAbs,endAbs:s.endAbs,dur:s.dur,needed:s.needed,minSpecial:s.minSpecial,mandatory:s.mandatory,
-             nElig:s.eligible.length,
-             nSpecialElig:s.eligible.filter(id=>SP.has(roleOf[id])).length})),
+           slots: prob.slots.map(s=>{
+             const rc = reqCertsOf[s.missionId]||[];
+             return {key:s.key, time:`${hhmm(s.startAbs)}-${hhmm(s.endAbs)}`, dur:s.dur, needed:s.needed,
+               minSpecial:s.minSpecial, mandatory:s.mandatory, requiredCerts:rc,
+               nElig:s.eligible.length,
+               nSpecialElig:s.eligible.filter(id=>SP.has(byId[id]?.role)).length};
+           }),
            nSoldiers: prob.soldiers.length,
            roles: prob.soldiers.reduce((a,s)=>{a[s.role]=(a[s.role]||0)+1;return a;},{}),
-           specialPresent: [...new Set(prob.slots.flatMap(s=>s.eligible).filter(id=>SP.has(roleOf[id])))].length });
+           specialPresent: [...new Set(prob.slots.flatMap(s=>s.eligible).filter(id=>SP.has(byId[id]?.role)))].length,
+           // ספירת בעלי-הסמכה הנוכחים, לפי סוג הסמכה
+           certHoldersPresent: (()=>{const present=[...new Set(prob.slots.flatMap(s=>s.eligible))];const c={};for(const id of present)for(const cert of (byId[id]?.certifications||[]))c[cert]=(c[cert]||0)+1;return c;})() });
          try { await navigator.clipboard.writeText(txt); notify('הנתונים הועתקו — הדבק לי אותם בצ\'אט','success'); }
          catch { window.prompt('העתק את הטקסט הזה ושלח לי:', txt); }
        }} style={{...S.btnGhost,borderColor:'#3b82f6',color:'#93c5fd'}}>
