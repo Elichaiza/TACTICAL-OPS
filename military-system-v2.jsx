@@ -3345,7 +3345,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
        </button>
        <button onClick={async()=>{
          const ms = dep.missions.filter(m=>selMissions.includes(m.id));
-         const prob = buildSolverProblem(ms, dep.soldiers, att, pinnedAssignments);
+         const prob = buildSolverProblem(ms, dep.soldiers, att, pinnedAssignments, dayStartMin);
          const SP = new Set(["סמל","מפקד","מפקד משימה","קצין"]);
          const byId = Object.fromEntries(dep.soldiers.map(s=>[s.id,s]));
          const reqCertsOf = Object.fromEntries(ms.map(m=>[m.id, m.requiredCerts||[]]));
