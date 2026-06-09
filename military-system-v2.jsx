@@ -2902,7 +2902,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
   setIsGenerating(true); setResult(null);
   // ── נסה את מנוע OR-Tools (backend); אם נכשל — fallback ל-JS V2 ──
   try {
-   const out = await solveViaBackend(missions, dep.soldiers, att, pinnedAssignments);
+   const out = await solveViaBackend(missions, dep.soldiers, att, pinnedAssignments, null, dayStartMin);
    if (out.feasible && out.forcedFill) {
     // הבעיה צמודה מדי — הוחזר שיבוץ מלא עם חריגות (במקום מבוי סתום)
     setResult(out.result);
