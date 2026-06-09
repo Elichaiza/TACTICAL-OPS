@@ -221,9 +221,11 @@ def _scan_violations(problem, assign):
     return V
 
 
-def _attempt_force(problem, time_limit=7.0, balance=False):
-    """מילוי כפוי: ממלא כל משמרת (עד גבול הזמינים), שובר רק מנוחה/מכסה/תפקיד
-    (לא חפיפה פיזית), ממזער הפרות. מחזיר שיבוץ + רשימת ההפרות."""
+def _attempt_force(problem, time_limit=7.0, balance=False, hard_safety=False):
+    """ממלא משמרות ככל האפשר.
+    hard_safety=True  → מנוחה 8ש' + מכסה 8ש'/יממה + חפיפה הם חוקים *קשיחים*
+                        שלא נשברים; אם אי-אפשר למלא — משאיר חורים (לשיבוץ הרגיל).
+    hard_safety=False → מילוי כפוי: ממלא הכל, מותר לשבור מנוחה/מכסה (מדווח)."""
     soldiers = problem["soldiers"]
     slots = problem["slots"]
     role_of = {s["id"]: s["role"] for s in soldiers}
@@ -235,12 +237,21 @@ def _attempt_force(problem, time_limit=7.0, balance=False):
     for key, sid in problem.get("forced", []):
         if (key, sid) in x:
             model.Add(x[(key, sid)] == 1)
-    # מילוי כפוי — עד הנדרש או עד מספר הזמינים
+    pen = []
+    unfilled = []
+    # מילוי: בטיחות-קשיחה → רך (≤נדרש, ממקסמים מילוי); כפוי → ==נדרש
     for sl in slots:
         vs = [x[(sl["key"], sid)] for sid in sl["eligible"]]
-        if vs:
-            model.Add(sum(vs) == min(sl["needed"], len(vs)))
-    pen = []
+        if not vs:
+            continue
+        cap_fill = min(sl["needed"], len(vs))
+        if hard_safety:
+            model.Add(sum(vs) <= cap_fill)
+            uf = model.NewIntVar(0, cap_fill, f"uf_{sl['key']}")
+            model.Add(uf == cap_fill - sum(vs))
+            unfilled.append(uf)
+        else:
+            model.Add(sum(vs) == cap_fill)
     n = len(slots)
     for i in range(n):
         for j in range(i + 1, n):
@@ -252,11 +263,14 @@ def _attempt_force(problem, time_limit=7.0, balance=False):
             gap = (b["startAbs"] - a["endAbs"]) if a["startAbs"] <= b["startAbs"] else (a["startAbs"] - b["endAbs"])
             for sid in common:
                 if overlap:
-                    model.Add(x[(a["key"], sid)] + x[(b["key"], sid)] <= 1)  # פיזי — קשיח
+                    model.Add(x[(a["key"], sid)] + x[(b["key"], sid)] <= 1)  # פיזי — תמיד קשיח
                 elif 0 <= gap < MIN_REST:
-                    v = model.NewBoolVar(f"rest_{a['key']}_{b['key']}_{sid}")
-                    model.Add(v >= x[(a["key"], sid)] + x[(b["key"], sid)] - 1)
-                    pen.append(v * 100)
+                    if hard_safety:
+                        model.Add(x[(a["key"], sid)] + x[(b["key"], sid)] <= 1)  # מנוחה — קשיח
+                    else:
+                        v = model.NewBoolVar(f"rest_{a['key']}_{b['key']}_{sid}")
+                        model.Add(v >= x[(a["key"], sid)] + x[(b["key"], sid)] - 1)
+                        pen.append(v * 100)
     starts = set()
     for sl in slots:
         k = (sl["startAbs"] - 600) // 1440
@@ -273,9 +287,12 @@ def _attempt_force(problem, time_limit=7.0, balance=False):
                 if ov > 0:
                     terms.append(ov * x[(sl["key"], sid)])
             if terms:
-                ex = model.NewIntVar(0, 100000, f"ex_{sid}_{k}")
-                model.Add(ex >= sum(terms) - MAX_DAILY)
-                pen.append(ex)  # קנס לפי דקות חריגה
+                if hard_safety:
+                    model.Add(sum(terms) <= MAX_DAILY)  # מכסה יומית — קשיח
+                else:
+                    ex = model.NewIntVar(0, 100000, f"ex_{sid}_{k}")
+                    model.Add(ex >= sum(terms) - MAX_DAILY)
+                    pen.append(ex)  # מכסה יומית — דקות חריגה
     for sl in slots:
         for r in sl.get("mandatory", []):
             rv = [x[(sl["key"], sid)] for sid in sl["eligible"] if role_of.get(sid) == r]
@@ -291,22 +308,20 @@ def _attempt_force(problem, time_limit=7.0, balance=False):
             short = model.NewIntVar(0, sl["needed"], f"sp_{sl['key']}")
             model.Add(short >= sl["minSpecial"] - (sum(sp) if sp else 0))
             pen.append(short * 300)
-    # מטרה: מזעור הפרות (דומיננטי) + איזון עומס מקסימלי (משני, רק כשאין הפרות)
-    obj = sum(pen) if pen else 0
+    # מטרה: הפרות/חורים (×10000, גוברים) ואז איזון עומס (maxL, שובר שוויון)
+    viol = sum(pen) if pen else 0
+    if unfilled:
+        viol = viol + sum(unfilled) * 10000   # חור = חמור כמו ~100 הפרות מנוחה
+    obj = viol * 10000
     if balance:
-        total_demand = sum(sl["dur"] * sl["needed"] for sl in slots)
         active = [s["id"] for s in soldiers
                   if any((sl["key"], s["id"]) in x for sl in slots)]
-        loads = {}
+        maxL = model.NewIntVar(0, MAX_DAILY * 31, "maxL")
         for sid in active:
             terms = [sl["dur"] * x[(sl["key"], sid)] for sl in slots if (sl["key"], sid) in x]
-            lv = model.NewIntVar(0, total_demand, f"ld_{sid}")
-            model.Add(lv == (sum(terms) if terms else 0))
-            loads[sid] = lv
-        maxL = model.NewIntVar(0, total_demand, "maxL")
-        for sid in active:
-            model.Add(maxL >= loads[sid])
-        obj = obj * 10000 + maxL  # הפרות גוברות; האיזון שובר שוויון
+            if terms:
+                model.Add(maxL >= sum(terms))
+        obj = obj + maxL
     model.Minimize(obj)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
@@ -344,9 +359,9 @@ def solve(problem):
        0 הפרות, קיים שיבוץ חוקי מלא ⇒ מחזירים אותו. כך בעיות צמודות-במיוחד עדיין
        נפתרות, ואף פעם לא מוכרז כשל שגוי על בעיה פתירה.
     3. אם גם force לא משיג 0 הפרות — הבעיה באמת over-constrained ⇒ אבחון + שיבוץ חלקי.
-    mode=force → מילוי כפוי עם דיווח הפרות."""
+    mode=force → מילוי כפוי שמותר לו לשבור מנוחה/מכסה (עם דיווח הפרות)."""
     if problem.get("mode") == "force":
-        return _attempt_force(problem, time_limit=8.0)
+        return _attempt_force(problem, time_limit=45.0, balance=True, hard_safety=False)
 
     # מסלול מהיר לבעיות אחידות: תקרה מאיצה דרמטית. אם התקרה שוברת (זמינות מעורבת)
     # — המסלול נכשל ונופל אוטומטית לסולבר האיטי-אופטימלי למטה.
@@ -359,12 +374,22 @@ def solve(problem):
         diag["reasons"] = structural + diag.get("reasons", [])
         return diag
 
-    # בעיות קשות: סולבר רך ממלא הכל + מאזן, עם זמן ארוך לתשובה אופטימלית
-    forced = _attempt_force(problem, time_limit=45.0, balance=True)
+    # מסלול אמין: בטיחות קשיחה — מנוחה+מכסה+חפיפה לעולם לא נשברים; מילוי מקסימלי + איזון
+    forced = _attempt_force(problem, time_limit=45.0, balance=True, hard_safety=True)
     if isinstance(forced, dict) and forced.get("feasible"):
-        if not forced.get("violations"):
+        viols = forced.get("violations", [])   # יכולים להיות רק unfilled/role/special
+        gaps = [v for v in viols if v["type"] in ("unfilled", "role", "special")]
+        if not gaps:
             return _result_from_assign(problem, forced["assignments"])  # מלא, חוקי, מאוזן
-        return forced  # מלא אך עם חריגות — מדווח (לא מבוי סתום)
+        # נשארו חורים/חוסר תפקיד תחת בטיחות קשיחה ⇒ דיווח + שיבוץ חלקי חוקי + 'מלא הכל'
+        holes = [{"slot": v["slot"], "missionId": v["slot"].rsplit("__", 1)[0],
+                  "have": v.get("have", 0), "need": v.get("need", 0), "cause": "manpower"}
+                 for v in viols if v["type"] == "unfilled"]
+        role_r = [{"type": "missing_role", "slot": v["slot"], "role": v["role"]}
+                  for v in viols if v["type"] == "role"]
+        return {"feasible": False, "reasons": role_r + [{"type": "holes", "holes": holes}],
+                "summary": _diagnose_summary(problem, holes),
+                "partial": dict(forced["assignments"])}
 
     return _relaxed_diagnose(problem)
 
