@@ -147,7 +147,7 @@ def _attempt(problem, use_cap=True, optimize=True, time_limit=9.0):
 
     rot = None
     if optimize:
-        # ── מטרה #1: איזון שעות — מזעור Σload² (= מזעור שונות, איזון מושלם) ──
+        # ── מטרת איזון: מזעור Σload² (= מזעור שונות, איזון מושלם) ──
         sq_terms = []
         for s in soldiers:
             sid = s["id"]
@@ -156,23 +156,7 @@ def _attempt(problem, use_cap=True, optimize=True, time_limit=9.0):
             sq_terms.append(sqv)
         sum_sq = model.NewIntVar(0, max_load * max_load * max(1, len(soldiers)), "sum_sq")
         model.Add(sum_sq == sum(sq_terms))
-
-        # ── מטרה #2: רוטציה — קנס על אותה משימה יותר מפעם ──
-        missions = set(sl["missionId"] for sl in slots)
-        excess = []
-        for s in soldiers:
-            sid = s["id"]
-            for m in missions:
-                cnt = [x[(sl["key"], sid)] for sl in slots
-                       if sl["missionId"] == m and (sl["key"], sid) in x]
-                if len(cnt) >= 2:
-                    ev = model.NewIntVar(0, len(cnt), f"ex_{sid}_{m}")
-                    model.Add(ev >= sum(cnt) - 1)
-                    excess.append(ev)
-        rot = model.NewIntVar(0, 100000, "rot")
-        model.Add(rot == (sum(excess) if excess else 0))
-
-        model.Minimize(sum_sq * 10000 + rot)
+        model.Minimize(sum_sq)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
@@ -346,10 +330,10 @@ def solve(problem):
     3. אם גם force לא משיג 0 הפרות — הבעיה באמת over-constrained ⇒ אבחון + שיבוץ חלקי.
     mode=force → מילוי כפוי עם דיווח הפרות."""
     if problem.get("mode") == "force":
-        return _attempt_force(problem, time_limit=7.0)
+        return _attempt_force(problem, time_limit=8.0)
 
-    # מסלול מהיר: שיבוץ מאוזן
-    opt = _attempt(problem, use_cap=True, optimize=True, time_limit=3.5)
+    # מסלול מהיר: שיבוץ מאוזן (תקרה + Σload²) — פותר את רוב הבעיות מהר ומושלם
+    opt = _attempt(problem, use_cap=True, optimize=True, time_limit=2.5)
     if isinstance(opt, dict) and opt.get("feasible"):
         return opt
     structural = opt.get("structural") if isinstance(opt, dict) else None
@@ -358,13 +342,15 @@ def solve(problem):
         diag["reasons"] = structural + diag.get("reasons", [])
         return diag
 
-    # מסלול אמין: סולבר ממזער-הפרות מוצא פתרון אם קיים
-    forced = _attempt_force(problem, time_limit=6.0)
-    if isinstance(forced, dict) and forced.get("feasible") and not forced.get("violations"):
-        # 0 הפרות = שיבוץ חוקי מלא קיים
-        return _result_from_assign(problem, forced["assignments"])
+    # מסלול אמין לבעיות צמודות: סולבר ממזער-הפרות מוצא פתרון מלא (0 או יותר הפרות)
+    forced = _attempt_force(problem, time_limit=6.5)
+    if isinstance(forced, dict) and forced.get("feasible"):
+        if not forced.get("violations"):
+            return _result_from_assign(problem, forced["assignments"])  # שיבוץ חוקי מלא
+        # נמצא שיבוץ מלא אך עם חריגות — מחזירים אותו עם דיווח (לא מבוי סתום)
+        return forced
 
-    # באמת over-constrained — אבחון + שיבוץ חלקי
+    # אפילו מילוי כפוי נכשל — אבחון (משמרות שאי-אפשר לאייש כלל)
     return _relaxed_diagnose(problem)
 
 
