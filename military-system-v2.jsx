@@ -3262,6 +3262,9 @@ function AssignmentTab({ dep, updateDep, notify }) {
       {Object.values(pinnedAssignments).some(v=>v.length>0) && (
        <button onClick={clearAllPins} style={{...S.btnSmall,borderColor:"#f59e0b",color:"#f59e0b"}}>
         🗑 נקה כל הנעיצות ({Object.values(pinnedAssignments).reduce((s,v)=>s+v.length,0)}) </button> )}
+      {dep.missions.filter(m=>selMissions.includes(m.id)).some(m=>m.shiftSplits?.length>0) && (
+       <button onClick={clearSplits} style={{...S.btnSmall,borderColor:"#22c55e",color:"#4ade80"}}>
+        ✂ בטל פיצולי חילופים </button> )}
       {(() => {
        const saved = (dep.assignments||[]).filter(a => a.date !== selDate).length;
        return saved > 0
