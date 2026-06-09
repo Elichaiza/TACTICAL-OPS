@@ -3321,7 +3321,15 @@ function AssignmentTab({ dep, updateDep, notify }) {
        <button onClick={async()=>{
          const ms = dep.missions.filter(m=>selMissions.includes(m.id));
          const prob = buildSolverProblem(ms, dep.soldiers, att, pinnedAssignments);
-         const txt = JSON.stringify({ slots: prob.slots.map(s=>({key:s.key,startAbs:s.startAbs,endAbs:s.endAbs,dur:s.dur,needed:s.needed,minSpecial:s.minSpecial,mandatory:s.mandatory,nElig:s.eligible.length})), nSoldiers: prob.soldiers.length, roles: prob.soldiers.reduce((a,s)=>{a[s.role]=(a[s.role]||0)+1;return a;},{}) });
+         const SP = new Set(["סמל","מפקד","מפקד משימה","קצין"]);
+         const roleOf = Object.fromEntries(prob.soldiers.map(s=>[s.id,s.role]));
+         const txt = JSON.stringify({
+           slots: prob.slots.map(s=>({key:s.key,startAbs:s.startAbs,endAbs:s.endAbs,dur:s.dur,needed:s.needed,minSpecial:s.minSpecial,mandatory:s.mandatory,
+             nElig:s.eligible.length,
+             nSpecialElig:s.eligible.filter(id=>SP.has(roleOf[id])).length})),
+           nSoldiers: prob.soldiers.length,
+           roles: prob.soldiers.reduce((a,s)=>{a[s.role]=(a[s.role]||0)+1;return a;},{}),
+           specialPresent: [...new Set(prob.slots.flatMap(s=>s.eligible).filter(id=>SP.has(roleOf[id])))].length });
          try { await navigator.clipboard.writeText(txt); notify('הנתונים הועתקו — הדבק לי אותם בצ\'אט','success'); }
          catch { window.prompt('העתק את הטקסט הזה ושלח לי:', txt); }
        }} style={{...S.btnGhost,borderColor:'#3b82f6',color:'#93c5fd'}}>
