@@ -2975,7 +2975,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
   if (!missions.length) return;
   setShowWarning(false); setIsGenerating(true); setResult(null); setForceViolations(null);
   try {
-   const out = await solveViaBackend(missions, dep.soldiers, att, pinnedAssignments, 'force');
+   const out = await solveViaBackend(missions, dep.soldiers, att, pinnedAssignments, 'force', dayStartMin);
    if (out.feasible) {
     setResult(out.result);
     const V = fmtViolations(out.violations, missions);
