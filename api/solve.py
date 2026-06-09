@@ -147,15 +147,16 @@ def _attempt(problem, use_cap=True, optimize=True, time_limit=9.0):
 
     rot = None
     if optimize:
-        # ── מטרת איזון לינארית: מזעור העומס המקסימלי ──
-        # מהיר (בלי כפל), וכופה איזון: כדי להוריד את המקסימום צריך לפזר שווה.
-        # מחזיק גם בזמינות מעורבת — החיילים הזמינים-מלא נדחפים לחלקם ההוגן.
-        active = [s["id"] for s in soldiers
-                  if any((sl["key"], s["id"]) in x for sl in slots)]
-        maxL = model.NewIntVar(0, max_load, "maxL")
-        for sid in active:
-            model.Add(maxL >= load[sid])
-        model.Minimize(maxL)
+        # ── מטרת איזון: מזעור Σload² (אופטימום יחיד → CP-SAT מוכיח מהר עם תקרה) ──
+        sq_terms = []
+        for s in soldiers:
+            sid = s["id"]
+            sqv = model.NewIntVar(0, max_load * max_load, f"sq_{sid}")
+            model.AddMultiplicationEquality(sqv, [load[sid], load[sid]])
+            sq_terms.append(sqv)
+        sum_sq = model.NewIntVar(0, max_load * max_load * max(1, len(soldiers)), "sum_sq")
+        model.Add(sum_sq == sum(sq_terms))
+        model.Minimize(sum_sq)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
@@ -347,8 +348,9 @@ def solve(problem):
     if problem.get("mode") == "force":
         return _attempt_force(problem, time_limit=8.0)
 
-    # מסלול מהיר: שיבוץ מאוזן (min maxLoad) — פותר בעיות קלות מהר ומושלם
-    opt = _attempt(problem, use_cap=False, optimize=True, time_limit=2.5)
+    # מסלול מהיר לבעיות אחידות: תקרה מאיצה דרמטית. אם התקרה שוברת (זמינות מעורבת)
+    # — המסלול נכשל ונופל אוטומטית לסולבר האיטי-אופטימלי למטה.
+    opt = _attempt(problem, use_cap=True, optimize=True, time_limit=5.0)
     if isinstance(opt, dict) and opt.get("feasible"):
         return opt
     structural = opt.get("structural") if isinstance(opt, dict) else None
@@ -357,8 +359,8 @@ def solve(problem):
         diag["reasons"] = structural + diag.get("reasons", [])
         return diag
 
-    # מסלול אמין: סולבר רך ממלא הכל מהר + מאזן (min maxLoad). מחזיר 0 הפרות אם אפשר.
-    forced = _attempt_force(problem, time_limit=6.5, balance=True)
+    # בעיות קשות: סולבר רך ממלא הכל + מאזן, עם זמן ארוך לתשובה אופטימלית
+    forced = _attempt_force(problem, time_limit=45.0, balance=True)
     if isinstance(forced, dict) and forced.get("feasible"):
         if not forced.get("violations"):
             return _result_from_assign(problem, forced["assignments"])  # מלא, חוקי, מאוזן
