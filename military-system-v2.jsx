@@ -2894,6 +2894,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [feasSummary, setFeasSummary] = useState(null);
  const [feasPartial, setFeasPartial] = useState(null); // שיבוץ חלקי להצגה אם היוזר בוחר
  const [forceViolations, setForceViolations] = useState(null); // הפרות במילוי כפוי
+ const [feasSplits, setFeasSplits] = useState([]); // הצעות פיצול משמרות-חילופים שיפתרו חורים
  const printRef = useRef();
  const att = dep.attendance||{};
  const dayStartMin = timeToMins(dep.dayStart || '10:00');
