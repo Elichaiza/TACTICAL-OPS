@@ -1455,10 +1455,11 @@ function _addDaysStr(dateStr, days) {
 /* נוכחות רצופה: מאחד את חלונות הנוכחות של החייל מהימים הסמוכים (אתמול+היום+מחר)
    לרצף אחד, ובודק אם המשמרת [sAbs,eAbs] נכנסת *כולה* בתוך רצף נוכחות.
    כך נוכחות "יום קודם מלא + היום 10:00–15:00" מתמזגת ל-[10:00 אתמול → 15:00 היום]
-   רציף, ומשמרת 06:00–14:00 (שתחילתה לפני גבול היממה) נכנסת בפנים.
+   רציף, ומשמרת 06:00–14:00 (שתחילתה לפני גבול היממה) נכנסת בפנים — אך *רק* אם
+   היממה הקודמת מכוסה גם היא (06:00–10:00 שייכות ליממה הקודמת).
    boundaryMin = שעת תחילת היממה הצבאית בדקות (10:00 = 600).
-   יממה מלאה (from===to / אין חלון) = [D 00:00 .. D+1 גבול] — מכסה את כל היום
-   הקלנדרי כולל הבוקר המוקדם, וגם את בוקר המחרת עד הגבול. */
+   יממה מלאה (from===to / אין חלון) = [D גבול .. D+1 גבול] — היממה הצבאית המלאה
+   של אותו יום בלבד (לא גולשת אחורה לבוקר שלפני הגבול). */
 function _presenceCovers(fullAtt, sid, sAbs, eAbs, startDate, boundaryMin = 600) {
  const dates = [_addDaysStr(startDate, -1), startDate, _addDaysStr(startDate, 1)];
  const ivs = [];
@@ -1472,7 +1473,7 @@ function _presenceCovers(fullAtt, sid, sAbs, eAbs, startDate, boundaryMin = 600)
    toStr   = getAttField(att, 'to',   null);
   }
   if (fromStr == null || toStr == null || fromStr === toStr) {
-   ivs.push([base, base + 1440 + boundaryMin]);            // יממה מלאה
+   ivs.push([base + boundaryMin, base + boundaryMin + 1440]);  // יממה צבאית מלאה: [D גבול .. D+1 גבול]
   } else {
    let fA = base + timeToMins(fromStr);
    let tA = base + timeToMins(toStr);
