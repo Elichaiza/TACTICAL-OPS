@@ -308,20 +308,30 @@ def _attempt_force(problem, time_limit=7.0, balance=False, hard_safety=False):
             short = model.NewIntVar(0, sl["needed"], f"sp_{sl['key']}")
             model.Add(short >= sl["minSpecial"] - (sum(sp) if sp else 0))
             pen.append(short * 300)
-    # מטרה: הפרות/חורים (×10000, גוברים) ואז איזון עומס (maxL, שובר שוויון)
+    # מטרה: חורים/הפרות (×10000 גוברים) ואז איזון — מזעור (maxL − minL) של הפעילים
     viol = sum(pen) if pen else 0
     if unfilled:
-        viol = viol + sum(unfilled) * 10000   # חור = חמור כמו ~100 הפרות מנוחה
+        viol = viol + sum(unfilled) * 10000
     obj = viol * 10000
     if balance:
         active = [s["id"] for s in soldiers
                   if any((sl["key"], s["id"]) in x for sl in slots)]
-        maxL = model.NewIntVar(0, MAX_DAILY * 31, "maxL")
+        bound = MAX_DAILY * 32
+        loads = {}
         for sid in active:
             terms = [sl["dur"] * x[(sl["key"], sid)] for sl in slots if (sl["key"], sid) in x]
-            if terms:
-                model.Add(maxL >= sum(terms))
-        obj = obj + maxL
+            if not terms:
+                continue
+            lv = model.NewIntVar(0, bound, f"ld_{sid}")
+            model.Add(lv == sum(terms))
+            loads[sid] = lv
+        if loads:
+            maxL = model.NewIntVar(0, bound, "maxL")
+            minL = model.NewIntVar(0, bound, "minL")
+            for lv in loads.values():
+                model.Add(maxL >= lv)
+                model.Add(minL <= lv)
+            obj = obj + (maxL - minL)   # מצמצם פער בין הכי עמוס להכי פנוי
     model.Minimize(obj)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
