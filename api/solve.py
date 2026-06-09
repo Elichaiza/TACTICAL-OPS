@@ -324,53 +324,48 @@ def _attempt_force(problem, time_limit=7.0):
             "violations": _scan_violations(problem, dict(assign))}
 
 
+def _result_from_assign(problem, assign, optimal=False):
+    """בונה תוצאת feasible מאובייקט שיבוץ."""
+    slots = {sl["key"]: sl for sl in problem["slots"]}
+    loadv = {}
+    for k, ids in assign.items():
+        for sid in ids:
+            loadv[sid] = loadv.get(sid, 0) + slots[k]["dur"]
+    vals = [v for v in loadv.values() if v > 0]
+    spread = (max(vals) - min(vals)) if vals else 0
+    return {"feasible": True, "optimal": optimal or spread == 0,
+            "assignments": assign, "spread": spread, "rotation": 0}
+
+
 def solve(problem):
-    """מתזמן דו-שלבי:
-    שלב 1 — מצא פתרון חוקי כלשהו (בלי אופטימיזציה) — מהיר ואמין. אם אין —
-            הבעיה באמת לא פתירה ⇒ אבחון + שיבוץ חלקי.
-    שלב 2 — שפר לאיזון מושלם (תקרה + Σload²) בזמן שנותר. אם הצליח, מחזיר אותו;
-            אחרת מחזיר את הפתרון החוקי משלב 1 (אף פעם לא מכריז כשל על בעיה פתירה).
+    """מתזמן:
+    1. מסלול מהיר — שיבוץ מאוזן (תקרה + Σload²). פותר את רוב הבעיות מהר ומושלם.
+    2. אם נכשל — סולבר ממזער-הפרות (force) הוא מנוע מציאת-פתרון אמין: אם הוא משיג
+       0 הפרות, קיים שיבוץ חוקי מלא ⇒ מחזירים אותו. כך בעיות צמודות-במיוחד עדיין
+       נפתרות, ואף פעם לא מוכרז כשל שגוי על בעיה פתירה.
+    3. אם גם force לא משיג 0 הפרות — הבעיה באמת over-constrained ⇒ אבחון + שיבוץ חלקי.
     mode=force → מילוי כפוי עם דיווח הפרות."""
     if problem.get("mode") == "force":
-        return _attempt_force(problem)
+        return _attempt_force(problem, time_limit=7.0)
 
-    # שלב 1: היתכנות (בלי מטרה, בלי תקרה) — מהיר ואמין
-    feasible = _attempt(problem, use_cap=False, optimize=False, time_limit=4.0)
-    if isinstance(feasible, dict) and feasible.get("structural"):
-        return _finalize_infeasible(problem, feasible["structural"])
-    if not isinstance(feasible, dict) or not feasible.get("feasible"):
-        # שלב 1 לא מצא פתרון בזמן — אבחן (מקסום מילוי). אם בעצם אפשר למלא הכל
-        # ולא נשברים תפקידים — זה פתיר! החזר אותו במקום להכריז כשל.
-        return _finalize_infeasible(problem, [])
-
-    # שלב 2: אופטימיזציה לאיזון — אם מצליח בזמן, עדיף; אחרת נשארים עם החוקי
-    optimized = _attempt(problem, use_cap=True, optimize=True, time_limit=5.0)
-    if isinstance(optimized, dict) and optimized.get("feasible"):
-        return optimized
-    return feasible  # פתרון חוקי (אולי לא מאוזן לגמרי) — עדיף מכשל שגוי
-
-
-def _finalize_infeasible(problem, structural):
-    """מריץ אבחון. אם מקסום-המילוי בעצם ממלא הכל ללא הפרת תפקיד — הבעיה פתירה,
-    מחזיר אותו כשיבוץ תקין. אחרת מחזיר אבחון אי-היתכנות + שיבוץ חלקי."""
-    diag = _relaxed_diagnose(problem)
-    partial = diag.get("partial", {})
-    viol = _scan_violations(problem, partial)
-    hard_break = [v for v in viol if v["type"] in ("unfilled", "role", "special")]
-    if not structural and not hard_break:
-        # מילוי מלא וחוקי נמצא — זו תוצאה תקפה
-        slots = {sl["key"]: sl for sl in problem["slots"]}
-        loadv = {}
-        for k, ids in partial.items():
-            for sid in ids:
-                loadv[sid] = loadv.get(sid, 0) + slots[k]["dur"]
-        vals = [v for v in loadv.values() if v > 0]
-        spread = (max(vals) - min(vals)) if vals else 0
-        return {"feasible": True, "optimal": spread == 0,
-                "assignments": partial, "spread": spread, "rotation": 0}
+    # מסלול מהיר: שיבוץ מאוזן
+    opt = _attempt(problem, use_cap=True, optimize=True, time_limit=3.5)
+    if isinstance(opt, dict) and opt.get("feasible"):
+        return opt
+    structural = opt.get("structural") if isinstance(opt, dict) else None
     if structural:
+        diag = _relaxed_diagnose(problem)
         diag["reasons"] = structural + diag.get("reasons", [])
-    return diag
+        return diag
+
+    # מסלול אמין: סולבר ממזער-הפרות מוצא פתרון אם קיים
+    forced = _attempt_force(problem, time_limit=6.0)
+    if isinstance(forced, dict) and forced.get("feasible") and not forced.get("violations"):
+        # 0 הפרות = שיבוץ חוקי מלא קיים
+        return _result_from_assign(problem, forced["assignments"])
+
+    # באמת over-constrained — אבחון + שיבוץ חלקי
+    return _relaxed_diagnose(problem)
 
 
 def _relaxed_diagnose(problem):
