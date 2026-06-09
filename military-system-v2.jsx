@@ -2956,6 +2956,41 @@ function AssignmentTab({ dep, updateDep, notify }) {
      return { name: m?.name || mId, shift: si + 1,
               date: sh?.startDate || '', time: sh ? `${sh.start}–${sh.end}` : '' };
     };
+    // ── זיהוי "פער חילופי כוחות": חור במשמרת שחוצה גבול יממה, שפיצול בגבול יפתור ──
+    const SP = new Set(["סמל","מפקד","מפקד משימה","קצין"]);
+    const absToDate = abs => { const days=Math.floor(abs/1440); const dt=new Date(Date.UTC(2000,0,1)+days*86400000); return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`; };
+    const absToTime = abs => { const m=((abs%1440)+1440)%1440; return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; };
+    const splits = [];
+    const seenSplit = new Set();
+    const splitCheck = (slotKey) => {
+     const sep = slotKey.lastIndexOf('__'); const mId = slotKey.slice(0,sep);
+     const si = parseInt(slotKey.slice(sep+2),10);
+     const m = missions.find(mm => mm.id === mId); if (!m) return;
+     const sh = computeMissionShifts(m)[si]; if (!sh || sh.isSplit) return;
+     const sAbs = _toAbs(sh.startDate, sh.start);
+     let eAbs = _toAbs(sh.endDate || sh.startDate, sh.end); if (eAbs <= sAbs) eAbs += 1440;
+     const k  = Math.floor((sAbs - dayStartMin) / 1440);
+     const nb = dayStartMin + (k + 1) * 1440;          // גבול היממה הבא אחרי תחילת המשמרת
+     if (!(sAbs < nb && nb < eAbs)) return;            // לא חוצה גבול → פיצול לא רלוונטי
+     const dedup = `${sh.startDate}|${sh.start}`; if (seenSplit.has(dedup)) return; seenSplit.add(dedup);
+     const needed  = m.soldiersPerShift || 1;
+     const minSpec = m.minSpecialRoles || 0;
+     const reqCerts = m.requiredCerts || [];
+     const eligHalf = (a, b) => dep.soldiers.filter(s =>
+       _presenceCovers(att, s.id, a, b, absToDate(a), dayStartMin) &&
+       (!reqCerts.length || reqCerts.every(c => s.certifications?.includes(c))));
+     const h1 = eligHalf(sAbs, nb), h2 = eligHalf(nb, eAbs);
+     const sp1 = h1.filter(s=>SP.has(s.role)).length, sp2 = h2.filter(s=>SP.has(s.role)).length;
+     // פיצול עוזר רק אם *כל* חצי ניתן לאיוש מלא (כולל מינימום מיוחד)
+     if (h1.length < needed || h2.length < needed || sp1 < minSpec || sp2 < minSpec) return;
+     splits.push({
+      missionId: mId, missionName: m.name,
+      spec: { startDate: sh.startDate, start: sh.start, at: absToTime(nb), atDate: absToDate(nb) },
+      label: `${m.name} · ${sh.start}–${sh.end} (${fmtDate(sh.startDate)})`,
+      first:  `${absToTime(sAbs)}–${absToTime(nb)} · ${h1.length} זמינים${minSpec?` (${sp1} מיוחדים)`:''}`,
+      second: `${absToTime(nb)}–${absToTime(eAbs)} · ${h2.length} זמינים${minSpec?` (${sp2} מיוחדים)`:''}`,
+     });
+    };
     const issues = [];
     for (const r of reasons) {
      if (r.type === 'holes') {
@@ -2964,6 +2999,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
        issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
                      time: inf.time, have: h.have, need: h.need,
                      cause: CAUSE[h.cause] || 'לא ניתן למלא' });
+       splitCheck(h.slot);
       }
      } else if (r.type === 'no_eligible' || r.type === 'few_eligible') {
       // מכוסה כבר ע"י holes (עם סיבה) — דלג כדי למנוע כפילות
@@ -2974,10 +3010,12 @@ function AssignmentTab({ dep, updateDep, notify }) {
       const inf = slotInfo(r.slot);
       issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
                     time: inf.time, have: 0, need: 0, cause: 'אין מספיק בעלי תפקיד מיוחד' });
+      splitCheck(r.slot);
      }
     }
     // תמיד הצג את המודל עם האפשרויות (חלקי / מילוי כפוי), גם אם אין פירוט ספציפי
     setFeasIssues(issues);
+    setFeasSplits(splits);
     setFeasSummary(out.summary || null);
     setFeasPartial(out.partialResult || null);
     setShowWarning(true);
