@@ -3405,6 +3405,25 @@ function AssignmentTab({ dep, updateDep, notify }) {
         </div>
        ))}
       </div>
+      {feasSplits.length>0 && (
+       <div style={{background:"#06281c",border:"1px solid #15803d",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
+        <div style={{color:"#4ade80",fontWeight:700,fontSize:13,marginBottom:6}}>🔄 זוהה פער חילופי כוחות — פתרון מומלץ</div>
+        <div style={{color:"#cbd5e1",fontSize:12,marginBottom:10}}>
+         המשמרות הבאות חוצות את גבול היממה ואי-אפשר לאייש אותן בחייל אחד (היוצאים מכסים עד הגבול, הנכנסים מהגבול).
+         פיצול בגבול יאפשר לכל קבוצה לאייש את חלקה — וכל המשמרות יתמלאו:
+        </div>
+        {feasSplits.map((sp,i)=>(
+         <div key={i} style={{fontSize:12,color:"#e2e8f0",marginBottom:6,paddingRight:6}}>
+          • <strong>{sp.label}</strong>
+          <div style={{color:"#94a3b8",fontSize:11,marginRight:10}}>↳ {sp.first}  |  {sp.second}</div>
+         </div>
+        ))}
+        <button onClick={()=>applySplits(feasSplits)}
+         style={{...S.btnPrimary,background:'#15803d',marginTop:8,width:'100%'}}>
+         ✂ פצל {feasSplits.length>1?`${feasSplits.length} משמרות`:'את המשמרת'} בגבול היממה ושבץ מחדש
+        </button>
+       </div>
+      )}
       <div style={{color:"#64748b",fontSize:13,marginBottom:16}}>
        בחר כיצד להמשיך:
       </div>
