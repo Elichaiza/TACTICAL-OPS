@@ -3329,8 +3329,8 @@ function AssignmentTab({ dep, updateDep, notify }) {
     <FormCard title="⏳ מחשב שיבוץ...">
      <div style={{textAlign:"center",padding:"30px 0",color:"#60a5fa",fontSize:16}}>
       <div style={{fontSize:40,marginBottom:12}}>⚙</div>
-      האלגוריתם מחפש את השיבוץ הטוב ביותר...
-      <div style={{fontSize:12,color:"#475569",marginTop:8}}>יכול לקחת עד 4 שניות</div>
+      האלגוריתם מחפש את השיבוץ האופטימלי...
+      <div style={{fontSize:12,color:"#475569",marginTop:8}}>בעיות מורכבות עשויות לקחת עד דקה — שווה את ההמתנה לאיזון מושלם</div>
      </div>
     </FormCard>
    )}
