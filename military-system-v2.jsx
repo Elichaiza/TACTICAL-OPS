@@ -2979,6 +2979,14 @@ function AssignmentTab({ dep, updateDep, notify }) {
      const eligHalf = (a, b) => dep.soldiers.filter(s =>
        _presenceCovers(att, s.id, a, b, absToDate(a), dayStartMin) &&
        (!reqCerts.length || reqCerts.every(c => s.certifications?.includes(c))));
+     // פיצול רלוונטי *רק* כשהמשמרת השלמה סובלת ממחסור זכאות (פער חילופים אמיתי).
+     // אם יש מספיק זכאים למשמרת השלמה — החור נובע ממחסור כוח-אדם/מנוחה, ופיצול
+     // לא יעזור (רק יפרק ל-4ש' ויגרום לצמידויות) — אז לא מציעים אותו.
+     const whole = dep.soldiers.filter(s =>
+       _presenceCovers(att, s.id, sAbs, eAbs, sh.startDate, dayStartMin) &&
+       (!reqCerts.length || reqCerts.every(c => s.certifications?.includes(c))));
+     const spWhole = whole.filter(s=>SP.has(s.role)).length;
+     if (whole.length >= needed && spWhole >= minSpec) return;   // יש שפע זכאות → לא פער חילופים
      const h1 = eligHalf(sAbs, nb), h2 = eligHalf(nb, eAbs);
      const sp1 = h1.filter(s=>SP.has(s.role)).length, sp2 = h2.filter(s=>SP.has(s.role)).length;
      // פיצול עוזר רק אם *כל* חצי ניתן לאיוש מלא (כולל מינימום מיוחד)
