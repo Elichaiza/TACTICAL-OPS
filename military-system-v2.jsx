@@ -3032,6 +3032,19 @@ function AssignmentTab({ dep, updateDep, notify }) {
   }
   setIsGenerating(false);
  }
+ /* פיצול משמרות-חילופים: שומר את הפיצולים במשימות ומשבץ מחדש מיד.
+    חצי ראשון (עד הגבול) ניתן לכוח היוצא, השני (מהגבול) לכוח הנכנס. */
+ async function applySplits(splitList) {
+  if (!splitList || !splitList.length) return;
+  const byMission = {};
+  for (const sp of splitList) (byMission[sp.missionId] = byMission[sp.missionId] || []).push(sp.spec);
+  const withSplits = m => byMission[m.id]
+   ? { ...m, shiftSplits: [...(m.shiftSplits||[]), ...byMission[m.id]] } : m;
+  updateDep(d => ({ ...d, missions: d.missions.map(withSplits) }));   // שמירה קבועה
+  const missions = dep.missions.filter(m=>selMissions.includes(m.id)).map(withSplits);
+  notify(`פוצלו ${splitList.length} משמרות חילופים — משבץ מחדש...`, 'success');
+  await run(missions);                                                // שיבוץ מיידי עם הפיצול
+ }
  /* מילוי כפוי — ממלא הכל גם במחיר חריגה מהחוקים, ומדווח על ההפרות */
  async function runForce() {
   const missions = dep.missions.filter(m=>selMissions.includes(m.id));
