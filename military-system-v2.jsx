@@ -122,20 +122,7 @@ function computeMissionShifts(f) {
    startOffsetMins: so,
    endOffsetMins:   eo,
   }); }
- return _applyShiftSplits(shifts, f.shiftSplits); }
-/* פיצול משמרות חילופים: מקבל רשימת spec {startDate,start,at,atDate} ומחזיר את
-   המשמרות כשכל אחת שמתאימה ל-spec מפוצלת לשתי תת-משמרות בנקודת הפיצול.
-   משמש לפתרון "פער חילופי כוחות" — חצי ראשון לכוח היוצא, שני לנכנס. */
-function _applyShiftSplits(shifts, splits) {
- if (!splits || !splits.length) return shifts;
- const out = [];
- for (const sh of shifts) {
-  const sp = splits.find(s => s.startDate === sh.startDate && s.start === sh.start);
-  if (!sp) { out.push(sh); continue; }
-  out.push({ ...sh, end: sp.at, endDate: sp.atDate, isSplit: true, splitHalf: 'a' });
-  out.push({ ...sh, start: sp.at, startDate: sp.atDate, isSplit: true, splitHalf: 'b' });
- }
- return out; }
+ return shifts; }
 /* ── עוזר נוכחות: תומך בפורמט ישן (מחרוזת) וחדש (אובייקט) ── */
 function getAttStatus(val) {
  if (!val) return "unknown";
@@ -2355,7 +2342,7 @@ function MissionsTab({ dep, updateDep, notify }) {
     dayNum:     startDayOffset + 1,
     shiftOfDay: (i % n) + 1,
    }); }
-  return _applyShiftSplits(shifts, f.shiftSplits); }
+  return shifts; }
  function save() {
   if(!form.name.trim()) return;
   const m={...form,shifts:computeMissionShifts(form),id:editing||uid()};
@@ -2894,7 +2881,6 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const [feasSummary, setFeasSummary] = useState(null);
  const [feasPartial, setFeasPartial] = useState(null); // שיבוץ חלקי להצגה אם היוזר בוחר
  const [forceViolations, setForceViolations] = useState(null); // הפרות במילוי כפוי
- const [feasSplits, setFeasSplits] = useState([]); // הצעות פיצול משמרות-חילופים שיפתרו חורים
  const printRef = useRef();
  const att = dep.attendance||{};
  const dayStartMin = timeToMins(dep.dayStart || '10:00');
@@ -2918,12 +2904,11 @@ function AssignmentTab({ dep, updateDep, notify }) {
    return { icon:'⚠', color:'#94a3b8', text:JSON.stringify(v) };
   });
  }
- /* שיבוץ — מנוע OR-Tools. אם יש חוסר, מציג הסבר + אפשרות לשיבוץ חלקי.
-    missionsArg — אופציונלי; מאפשר להריץ עם משימות מתוקנות (למשל אחרי פיצול). */
- async function run(missionsArg) {
-  const missions = missionsArg || dep.missions.filter(m=>selMissions.includes(m.id));
+ /* שיבוץ — מנוע OR-Tools. אם יש חוסר, מציג הסבר + אפשרות לשיבוץ חלקי */
+ async function run() {
+  const missions = dep.missions.filter(m=>selMissions.includes(m.id));
   if (!missions.length) return;
-  setShowWarning(false); setFeasIssues([]); setFeasPartial(null); setFeasSplits([]);
+  setShowWarning(false); setFeasIssues([]); setFeasPartial(null);
   setIsGenerating(true); setResult(null);
   // ── נסה את מנוע OR-Tools (backend); אם נכשל — fallback ל-JS V2 ──
   try {
@@ -2956,49 +2941,6 @@ function AssignmentTab({ dep, updateDep, notify }) {
      return { name: m?.name || mId, shift: si + 1,
               date: sh?.startDate || '', time: sh ? `${sh.start}–${sh.end}` : '' };
     };
-    // ── זיהוי "פער חילופי כוחות": חור במשמרת שחוצה גבול יממה, שפיצול בגבול יפתור ──
-    const SP = new Set(["סמל","מפקד","מפקד משימה","קצין"]);
-    const absToDate = abs => { const days=Math.floor(abs/1440); const dt=new Date(Date.UTC(2000,0,1)+days*86400000); return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`; };
-    const absToTime = abs => { const m=((abs%1440)+1440)%1440; return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; };
-    const splits = [];
-    const seenSplit = new Set();
-    const splitCheck = (slotKey) => {
-     const sep = slotKey.lastIndexOf('__'); const mId = slotKey.slice(0,sep);
-     const si = parseInt(slotKey.slice(sep+2),10);
-     const m = missions.find(mm => mm.id === mId); if (!m) return;
-     const sh = computeMissionShifts(m)[si]; if (!sh || sh.isSplit) return;
-     const sAbs = _toAbs(sh.startDate, sh.start);
-     let eAbs = _toAbs(sh.endDate || sh.startDate, sh.end); if (eAbs <= sAbs) eAbs += 1440;
-     const k  = Math.floor((sAbs - dayStartMin) / 1440);
-     const nb = dayStartMin + (k + 1) * 1440;          // גבול היממה הבא אחרי תחילת המשמרת
-     if (!(sAbs < nb && nb < eAbs)) return;            // לא חוצה גבול → פיצול לא רלוונטי
-     const dedup = `${sh.startDate}|${sh.start}`; if (seenSplit.has(dedup)) return; seenSplit.add(dedup);
-     const needed  = m.soldiersPerShift || 1;
-     const minSpec = m.minSpecialRoles || 0;
-     const reqCerts = m.requiredCerts || [];
-     const eligHalf = (a, b) => dep.soldiers.filter(s =>
-       _presenceCovers(att, s.id, a, b, absToDate(a), dayStartMin) &&
-       (!reqCerts.length || reqCerts.every(c => s.certifications?.includes(c))));
-     // פיצול רלוונטי *רק* כשהמשמרת השלמה סובלת ממחסור זכאות (פער חילופים אמיתי).
-     // אם יש מספיק זכאים למשמרת השלמה — החור נובע ממחסור כוח-אדם/מנוחה, ופיצול
-     // לא יעזור (רק יפרק ל-4ש' ויגרום לצמידויות) — אז לא מציעים אותו.
-     const whole = dep.soldiers.filter(s =>
-       _presenceCovers(att, s.id, sAbs, eAbs, sh.startDate, dayStartMin) &&
-       (!reqCerts.length || reqCerts.every(c => s.certifications?.includes(c))));
-     const spWhole = whole.filter(s=>SP.has(s.role)).length;
-     if (whole.length >= needed && spWhole >= minSpec) return;   // יש שפע זכאות → לא פער חילופים
-     const h1 = eligHalf(sAbs, nb), h2 = eligHalf(nb, eAbs);
-     const sp1 = h1.filter(s=>SP.has(s.role)).length, sp2 = h2.filter(s=>SP.has(s.role)).length;
-     // פיצול עוזר רק אם *כל* חצי ניתן לאיוש מלא (כולל מינימום מיוחד)
-     if (h1.length < needed || h2.length < needed || sp1 < minSpec || sp2 < minSpec) return;
-     splits.push({
-      missionId: mId, missionName: m.name,
-      spec: { startDate: sh.startDate, start: sh.start, at: absToTime(nb), atDate: absToDate(nb) },
-      label: `${m.name} · ${sh.start}–${sh.end} (${fmtDate(sh.startDate)})`,
-      first:  `${absToTime(sAbs)}–${absToTime(nb)} · ${h1.length} זמינים${minSpec?` (${sp1} מיוחדים)`:''}`,
-      second: `${absToTime(nb)}–${absToTime(eAbs)} · ${h2.length} זמינים${minSpec?` (${sp2} מיוחדים)`:''}`,
-     });
-    };
     const issues = [];
     for (const r of reasons) {
      if (r.type === 'holes') {
@@ -3007,7 +2949,6 @@ function AssignmentTab({ dep, updateDep, notify }) {
        issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
                      time: inf.time, have: h.have, need: h.need,
                      cause: CAUSE[h.cause] || 'לא ניתן למלא' });
-       splitCheck(h.slot);
       }
      } else if (r.type === 'no_eligible' || r.type === 'few_eligible') {
       // מכוסה כבר ע"י holes (עם סיבה) — דלג כדי למנוע כפילות
@@ -3018,12 +2959,10 @@ function AssignmentTab({ dep, updateDep, notify }) {
       const inf = slotInfo(r.slot);
       issues.push({ type:'hole', mission: inf.name, shift: inf.shift, date: inf.date,
                     time: inf.time, have: 0, need: 0, cause: 'אין מספיק בעלי תפקיד מיוחד' });
-      splitCheck(r.slot);
      }
     }
     // תמיד הצג את המודל עם האפשרויות (חלקי / מילוי כפוי), גם אם אין פירוט ספציפי
     setFeasIssues(issues);
-    setFeasSplits(splits);
     setFeasSummary(out.summary || null);
     setFeasPartial(out.partialResult || null);
     setShowWarning(true);
@@ -3039,25 +2978,6 @@ function AssignmentTab({ dep, updateDep, notify }) {
    } catch(e2) { console.error('V2 error:', e2); notify('שגיאת שיבוץ', 'error'); }
   }
   setIsGenerating(false);
- }
- /* פיצול משמרות-חילופים: שומר את הפיצולים במשימות ומשבץ מחדש מיד.
-    חצי ראשון (עד הגבול) ניתן לכוח היוצא, השני (מהגבול) לכוח הנכנס. */
- async function applySplits(splitList) {
-  if (!splitList || !splitList.length) return;
-  const byMission = {};
-  for (const sp of splitList) (byMission[sp.missionId] = byMission[sp.missionId] || []).push(sp.spec);
-  const withSplits = m => byMission[m.id]
-   ? { ...m, shiftSplits: [...(m.shiftSplits||[]), ...byMission[m.id]] } : m;
-  updateDep(d => ({ ...d, missions: d.missions.map(withSplits) }));   // שמירה קבועה
-  const missions = dep.missions.filter(m=>selMissions.includes(m.id)).map(withSplits);
-  notify(`פוצלו ${splitList.length} משמרות חילופים — משבץ מחדש...`, 'success');
-  await run(missions);                                                // שיבוץ מיידי עם הפיצול
- }
- /* ביטול כל פיצולי החילופים במשימות הנבחרות (חזרה למשמרות המקוריות) */
- function clearSplits() {
-  updateDep(d => ({ ...d, missions: d.missions.map(m =>
-   (selMissions.includes(m.id) && m.shiftSplits?.length) ? { ...m, shiftSplits: [] } : m) }));
-  notify('פיצולי החילופים בוטלו — המשמרות חזרו למקוריות', 'success');
  }
  /* מילוי כפוי — ממלא הכל גם במחיר חריגה מהחוקים, ומדווח על ההפרות */
  async function runForce() {
@@ -3262,9 +3182,6 @@ function AssignmentTab({ dep, updateDep, notify }) {
       {Object.values(pinnedAssignments).some(v=>v.length>0) && (
        <button onClick={clearAllPins} style={{...S.btnSmall,borderColor:"#f59e0b",color:"#f59e0b"}}>
         🗑 נקה כל הנעיצות ({Object.values(pinnedAssignments).reduce((s,v)=>s+v.length,0)}) </button> )}
-      {dep.missions.filter(m=>selMissions.includes(m.id)).some(m=>m.shiftSplits?.length>0) && (
-       <button onClick={clearSplits} style={{...S.btnSmall,borderColor:"#22c55e",color:"#4ade80"}}>
-        ✂ בטל פיצולי חילופים </button> )}
       {(() => {
        const saved = (dep.assignments||[]).filter(a => a.date !== selDate).length;
        return saved > 0
@@ -3422,25 +3339,6 @@ function AssignmentTab({ dep, updateDep, notify }) {
         </div>
        ))}
       </div>
-      {feasSplits.length>0 && (
-       <div style={{background:"#06281c",border:"1px solid #15803d",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
-        <div style={{color:"#4ade80",fontWeight:700,fontSize:13,marginBottom:6}}>🔄 זוהה פער חילופי כוחות — פתרון מומלץ</div>
-        <div style={{color:"#cbd5e1",fontSize:12,marginBottom:10}}>
-         המשמרות הבאות חוצות את גבול היממה ואי-אפשר לאייש אותן בחייל אחד (היוצאים מכסים עד הגבול, הנכנסים מהגבול).
-         פיצול בגבול יאפשר לכל קבוצה לאייש את חלקה — וכל המשמרות יתמלאו:
-        </div>
-        {feasSplits.map((sp,i)=>(
-         <div key={i} style={{fontSize:12,color:"#e2e8f0",marginBottom:6,paddingRight:6}}>
-          • <strong>{sp.label}</strong>
-          <div style={{color:"#94a3b8",fontSize:11,marginRight:10}}>↳ {sp.first}  |  {sp.second}</div>
-         </div>
-        ))}
-        <button onClick={()=>applySplits(feasSplits)}
-         style={{...S.btnPrimary,background:'#15803d',marginTop:8,width:'100%'}}>
-         ✂ פצל {feasSplits.length>1?`${feasSplits.length} משמרות`:'את המשמרת'} בגבול היממה ושבץ מחדש
-        </button>
-       </div>
-      )}
       <div style={{color:"#64748b",fontSize:13,marginBottom:16}}>
        בחר כיצד להמשיך:
       </div>
@@ -3585,7 +3483,6 @@ function AssignmentTab({ dep, updateDep, notify }) {
                   {sh.start} – {sh.end} </div>
                  <div style={{fontSize:10,color:"#475569",marginTop:2}}>
                   משמרת {sh.shiftOfDay||sh.sIdx+1}
-                  {sh.isSplit&&<span style={{color:"#4ade80",marginRight:4}}>· 🔄 חילופים {sh.splitHalf==='a'?'(יוצא)':'(נכנס)'}</span>}
                   {!sh.filled&&<span style={{color:"#f87171",marginRight:6}}>· ⚠ חסרים {sh.needed-(sh.soldierIds?.length||0)}</span>}
                  </div> </div>
                 
