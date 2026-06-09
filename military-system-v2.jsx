@@ -2701,8 +2701,16 @@ function AttendanceTab({ dep, updateDep, notify }) {
       setSelectedDate(next);
       updateDep(d=>({...d,attendance:{...d.attendance,[next]:d.attendance[next]||{}}}));
      }} style={{...S.btnPrimary,padding:"4px 10px",fontSize:12,background:"#1e3a5f"}}>+יום →</button> </div> </div>
-   <div style={{color:"#4a5568",fontSize:12,marginBottom:12}}>
-    📅 נוכחות מ-10:00 {fmtDate(selectedDate)} עד 10:00 {fmtDate(nextDay)} </div>
+   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+    <div style={{color:"#4a5568",fontSize:12}}>
+     📅 נוכחות מ-{dayStart} {fmtDate(selectedDate)} עד {dayStart} {fmtDate(nextDay)} </div>
+    <div style={{display:"flex",alignItems:"center",gap:5,marginRight:"auto",
+      background:"#0a0e18",border:"1px solid #1e293b",borderRadius:8,padding:"4px 8px"}}>
+     <span style={{color:"#64748b",fontSize:11}}>🕙 תחילת יממה:</span>
+     <input type="time" value={dayStart}
+      onChange={e=>updateDep(d=>({...d,dayStart:e.target.value}))}
+      style={{...S.input,padding:"2px 6px",fontSize:12,width:82}}/>
+     <span style={{color:"#475569",fontSize:10}}>(ברירת מחדל 10:00)</span> </div> </div>
    
    <div style={{display:"flex",gap:4,marginBottom:14}}>
     {[["table","📋 טבלה"],["stats","📊 סטטיסטיקות"],["history","📆 היסטוריה"]].map(([id,label])=>(
