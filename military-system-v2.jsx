@@ -2523,13 +2523,14 @@ function AttendanceTab({ dep, updateDep, notify }) {
  const [filterStatus, setFilterStatus] = useState("");
  const att   = dep.attendance||{};
  const rec   = att[selectedDate]||{};
+ const dayStart = dep.dayStart || "10:00";   // שעת תחילת היממה הצבאית
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
  function setField(id, field, value) {
   updateDep(d => {
    const prev    = d.attendance?.[selectedDate]?.[id];
    const prevObj = typeof prev === "string"
-    ? { status: prev, note: "", from: "10:00", to: "10:00" }
-    : { status: "unknown", note: "", from: "10:00", to: "10:00", ...(prev||{}) };
+    ? { status: prev, note: "", from: dayStart, to: dayStart }
+    : { status: "unknown", note: "", from: dayStart, to: dayStart, ...(prev||{}) };
    return { ...d, attendance: { ...d.attendance, [selectedDate]: {
     ...(d.attendance[selectedDate]||{}),
     [id]: { ...prevObj, [field]: value }
