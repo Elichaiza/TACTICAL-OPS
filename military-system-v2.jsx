@@ -3358,7 +3358,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
      )}
      <FormCard title="📊 מד עומס חיילים — שוויון ומנוחה">
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-       {presentSoldiers
+       {loadSoldiers
         .slice()
         .sort((a,b)=>(loadStats[b.id]?.mins||0)-(loadStats[a.id]?.mins||0))
         .map(s=>{
