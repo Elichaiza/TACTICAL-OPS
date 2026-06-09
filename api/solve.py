@@ -337,22 +337,40 @@ def solve(problem):
     # שלב 1: היתכנות (בלי מטרה, בלי תקרה) — מהיר ואמין
     feasible = _attempt(problem, use_cap=False, optimize=False, time_limit=4.0)
     if isinstance(feasible, dict) and feasible.get("structural"):
-        diag = _relaxed_diagnose(problem)
-        diag["reasons"] = feasible["structural"] + diag.get("reasons", [])
-        return diag
+        return _finalize_infeasible(problem, feasible["structural"])
     if not isinstance(feasible, dict) or not feasible.get("feasible"):
-        # לא נמצא פתרון חוקי — באמת לא פתיר (או קשה מאוד) ⇒ אבחון
-        return _relaxed_diagnose(problem)
+        # שלב 1 לא מצא פתרון בזמן — אבחן (מקסום מילוי). אם בעצם אפשר למלא הכל
+        # ולא נשברים תפקידים — זה פתיר! החזר אותו במקום להכריז כשל.
+        return _finalize_infeasible(problem, [])
 
     # שלב 2: אופטימיזציה לאיזון — אם מצליח בזמן, עדיף; אחרת נשארים עם החוקי
     optimized = _attempt(problem, use_cap=True, optimize=True, time_limit=5.0)
     if isinstance(optimized, dict) and optimized.get("feasible"):
         return optimized
-    # תקרה גרמה לקושי/אי-היתכנות — נסה אופטימיזציה בלי תקרה בזמן קצר
-    opt2 = _attempt(problem, use_cap=False, optimize=True, time_limit=3.0)
-    if isinstance(opt2, dict) and opt2.get("feasible"):
-        return opt2
     return feasible  # פתרון חוקי (אולי לא מאוזן לגמרי) — עדיף מכשל שגוי
+
+
+def _finalize_infeasible(problem, structural):
+    """מריץ אבחון. אם מקסום-המילוי בעצם ממלא הכל ללא הפרת תפקיד — הבעיה פתירה,
+    מחזיר אותו כשיבוץ תקין. אחרת מחזיר אבחון אי-היתכנות + שיבוץ חלקי."""
+    diag = _relaxed_diagnose(problem)
+    partial = diag.get("partial", {})
+    viol = _scan_violations(problem, partial)
+    hard_break = [v for v in viol if v["type"] in ("unfilled", "role", "special")]
+    if not structural and not hard_break:
+        # מילוי מלא וחוקי נמצא — זו תוצאה תקפה
+        slots = {sl["key"]: sl for sl in problem["slots"]}
+        loadv = {}
+        for k, ids in partial.items():
+            for sid in ids:
+                loadv[sid] = loadv.get(sid, 0) + slots[k]["dur"]
+        vals = [v for v in loadv.values() if v > 0]
+        spread = (max(vals) - min(vals)) if vals else 0
+        return {"feasible": True, "optimal": spread == 0,
+                "assignments": partial, "spread": spread, "rotation": 0}
+    if structural:
+        diag["reasons"] = structural + diag.get("reasons", [])
+    return diag
 
 
 def _relaxed_diagnose(problem):
