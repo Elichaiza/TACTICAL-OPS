@@ -1784,7 +1784,7 @@ function AppInner() {
         {cloudSyncStatus==='saving'?'⏳ שומר...'
          :cloudSyncStatus==='ok'  ?'✓ נשמר'
          :cloudSyncStatus==='err' ?'✗ שגיאה'
-         :'☁ שמור ל-Supabase'}
+         :'💾 שמור שינויים'}
        </button>
       </div>
      )}
