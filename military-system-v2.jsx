@@ -1490,7 +1490,7 @@ function _presenceCovers(fullAtt, sid, sAbs, eAbs, startDate, boundaryMin = 600)
  return merged.some(iv => sAbs >= iv[0] && eAbs <= iv[1]);
 }
 /* בונה את בעיית ה-CSP לשליחה ל-backend — כולל זכאות פר-משמרת */
-function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {}) {
+function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {}, dayStartMin = 600) {
  const slots = [];
  const slotMeta = {}; // key -> {missionId, shiftIdx}
  missions.forEach(mission => {
@@ -1500,25 +1500,12 @@ function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {})
    const eRaw = _toAbs(sh.endDate || sh.startDate, sh.end);
    const eAbs = eRaw > sAbs ? eRaw : eRaw + 1440;
    const reqCerts = mission.requiredCerts || [];
-   // יום התורנות = תאריך תחילת המשימה + (dayNum-1). משמרת לילה שגולשת
-   // לבוקר המחרת שייכת ליום התורנות, לא לתאריך הקלנדרי.
-   const dutyDate = _addDaysStr(mission.startDate, (sh.dayNum || 1) - 1);
-   // זכאות: נוכח ביום התורנות + חלון שעות מכסה + הסמכות
+   // זכאות: נוכחות רצופה שמכסה את כל המשמרת (כולל מעבר בין יממות) + הסמכות.
+   // _presenceCovers מאחד את חלונות הנוכחות מהימים הסמוכים — כך משמרת שתחילתה
+   // לפני גבול היממה (למשל 06:00) מכוסה ע"י נוכחות היממה הקודמת.
    const eligible = [];
    for (const s of soldiers) {
-    const dayAtt = (fullAtt[dutyDate] || {})[s.id];
-    if (getAttStatus(dayAtt) !== 'present') continue;
-    if (dayAtt && typeof dayAtt === 'object') {
-     const from = getAttField(dayAtt, 'from', '10:00');
-     const to   = getAttField(dayAtt, 'to',   '10:00');
-     if (from !== to) {
-      const base = _toAbs(dutyDate, '00:00');
-      const fA = base + timeToMins(from);
-      let   tA = base + timeToMins(to);
-      if (tA <= fA) tA += 1440;
-      if (sAbs < fA || eAbs > tA) continue;
-     }
-    }
+    if (!_presenceCovers(fullAtt, s.id, sAbs, eAbs, sh.startDate, dayStartMin)) continue;
     if (reqCerts.length && !reqCerts.every(c => s.certifications?.includes(c))) continue;
     eligible.push(s.id);
    }
