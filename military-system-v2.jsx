@@ -122,7 +122,20 @@ function computeMissionShifts(f) {
    startOffsetMins: so,
    endOffsetMins:   eo,
   }); }
- return shifts; }
+ return _applyShiftSplits(shifts, f.shiftSplits); }
+/* פיצול משמרות חילופים: מקבל רשימת spec {startDate,start,at,atDate} ומחזיר את
+   המשמרות כשכל אחת שמתאימה ל-spec מפוצלת לשתי תת-משמרות בנקודת הפיצול.
+   משמש לפתרון "פער חילופי כוחות" — חצי ראשון לכוח היוצא, שני לנכנס. */
+function _applyShiftSplits(shifts, splits) {
+ if (!splits || !splits.length) return shifts;
+ const out = [];
+ for (const sh of shifts) {
+  const sp = splits.find(s => s.startDate === sh.startDate && s.start === sh.start);
+  if (!sp) { out.push(sh); continue; }
+  out.push({ ...sh, end: sp.at, endDate: sp.atDate, isSplit: true, splitHalf: 'a' });
+  out.push({ ...sh, start: sp.at, startDate: sp.atDate, isSplit: true, splitHalf: 'b' });
+ }
+ return out; }
 /* ── עוזר נוכחות: תומך בפורמט ישן (מחרוזת) וחדש (אובייקט) ── */
 function getAttStatus(val) {
  if (!val) return "unknown";
