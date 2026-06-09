@@ -2860,7 +2860,12 @@ function AssignmentTab({ dep, updateDep, notify }) {
   // ── נסה את מנוע OR-Tools (backend); אם נכשל — fallback ל-JS V2 ──
   try {
    const out = await solveViaBackend(missions, dep.soldiers, att, pinnedAssignments);
-   if (out.feasible) {
+   if (out.feasible && out.forcedFill) {
+    // הבעיה צמודה מדי — הוחזר שיבוץ מלא עם חריגות (במקום מבוי סתום)
+    setResult(out.result);
+    setForceViolations(fmtViolations(out.violations, missions));
+    notify(`שובץ עם ${(out.violations||[]).length} חריגות (בעיה צמודה — ראה פירוט)`, 'warn');
+   } else if (out.feasible) {
     setResult(out.result); setForceViolations(null);
     notify(out.optimal
      ? `שיבוץ אופטימלי! פער שעות: ${Math.round((out.spread||0)/60*10)/10}ש'`
