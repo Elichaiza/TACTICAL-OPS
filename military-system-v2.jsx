@@ -2355,7 +2355,7 @@ function MissionsTab({ dep, updateDep, notify }) {
     dayNum:     startDayOffset + 1,
     shiftOfDay: (i % n) + 1,
    }); }
-  return shifts; }
+  return _applyShiftSplits(shifts, f.shiftSplits); }
  function save() {
   if(!form.name.trim()) return;
   const m={...form,shifts:computeMissionShifts(form),id:editing||uid()};
