@@ -3568,6 +3568,7 @@ function AssignmentTab({ dep, updateDep, notify }) {
                   {sh.start} – {sh.end} </div>
                  <div style={{fontSize:10,color:"#475569",marginTop:2}}>
                   משמרת {sh.shiftOfDay||sh.sIdx+1}
+                  {sh.isSplit&&<span style={{color:"#4ade80",marginRight:4}}>· 🔄 חילופים {sh.splitHalf==='a'?'(יוצא)':'(נכנס)'}</span>}
                   {!sh.filled&&<span style={{color:"#f87171",marginRight:6}}>· ⚠ חסרים {sh.needed-(sh.soldierIds?.length||0)}</span>}
                  </div> </div>
                 
