@@ -147,16 +147,15 @@ def _attempt(problem, use_cap=True, optimize=True, time_limit=9.0):
 
     rot = None
     if optimize:
-        # ── מטרת איזון: מזעור Σload² (= מזעור שונות, איזון מושלם) ──
-        sq_terms = []
-        for s in soldiers:
-            sid = s["id"]
-            sqv = model.NewIntVar(0, max_load * max_load, f"sq_{sid}")
-            model.AddMultiplicationEquality(sqv, [load[sid], load[sid]])
-            sq_terms.append(sqv)
-        sum_sq = model.NewIntVar(0, max_load * max_load * max(1, len(soldiers)), "sum_sq")
-        model.Add(sum_sq == sum(sq_terms))
-        model.Minimize(sum_sq)
+        # ── מטרת איזון לינארית: מזעור העומס המקסימלי ──
+        # מהיר (בלי כפל), וכופה איזון: כדי להוריד את המקסימום צריך לפזר שווה.
+        # מחזיק גם בזמינות מעורבת — החיילים הזמינים-מלא נדחפים לחלקם ההוגן.
+        active = [s["id"] for s in soldiers
+                  if any((sl["key"], s["id"]) in x for sl in slots)]
+        maxL = model.NewIntVar(0, max_load, "maxL")
+        for sid in active:
+            model.Add(maxL >= load[sid])
+        model.Minimize(maxL)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
@@ -221,7 +220,7 @@ def _scan_violations(problem, assign):
     return V
 
 
-def _attempt_force(problem, time_limit=7.0):
+def _attempt_force(problem, time_limit=7.0, balance=False):
     """מילוי כפוי: ממלא כל משמרת (עד גבול הזמינים), שובר רק מנוחה/מכסה/תפקיד
     (לא חפיפה פיזית), ממזער הפרות. מחזיר שיבוץ + רשימת ההפרות."""
     soldiers = problem["soldiers"]
@@ -291,7 +290,23 @@ def _attempt_force(problem, time_limit=7.0):
             short = model.NewIntVar(0, sl["needed"], f"sp_{sl['key']}")
             model.Add(short >= sl["minSpecial"] - (sum(sp) if sp else 0))
             pen.append(short * 300)
-    model.Minimize(sum(pen) if pen else 0)
+    # מטרה: מזעור הפרות (דומיננטי) + איזון עומס מקסימלי (משני, רק כשאין הפרות)
+    obj = sum(pen) if pen else 0
+    if balance:
+        total_demand = sum(sl["dur"] * sl["needed"] for sl in slots)
+        active = [s["id"] for s in soldiers
+                  if any((sl["key"], s["id"]) in x for sl in slots)]
+        loads = {}
+        for sid in active:
+            terms = [sl["dur"] * x[(sl["key"], sid)] for sl in slots if (sl["key"], sid) in x]
+            lv = model.NewIntVar(0, total_demand, f"ld_{sid}")
+            model.Add(lv == (sum(terms) if terms else 0))
+            loads[sid] = lv
+        maxL = model.NewIntVar(0, total_demand, "maxL")
+        for sid in active:
+            model.Add(maxL >= loads[sid])
+        obj = obj * 10000 + maxL  # הפרות גוברות; האיזון שובר שוויון
+    model.Minimize(obj)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
     solver.parameters.num_search_workers = 8
@@ -332,8 +347,8 @@ def solve(problem):
     if problem.get("mode") == "force":
         return _attempt_force(problem, time_limit=8.0)
 
-    # מסלול מהיר: שיבוץ מאוזן (תקרה + Σload²) — פותר את רוב הבעיות מהר ומושלם
-    opt = _attempt(problem, use_cap=True, optimize=True, time_limit=2.5)
+    # מסלול מהיר: שיבוץ מאוזן (min maxLoad) — פותר בעיות קלות מהר ומושלם
+    opt = _attempt(problem, use_cap=False, optimize=True, time_limit=2.5)
     if isinstance(opt, dict) and opt.get("feasible"):
         return opt
     structural = opt.get("structural") if isinstance(opt, dict) else None
@@ -342,15 +357,13 @@ def solve(problem):
         diag["reasons"] = structural + diag.get("reasons", [])
         return diag
 
-    # מסלול אמין לבעיות צמודות: סולבר ממזער-הפרות מוצא פתרון מלא (0 או יותר הפרות)
-    forced = _attempt_force(problem, time_limit=6.5)
+    # מסלול אמין: סולבר רך ממלא הכל מהר + מאזן (min maxLoad). מחזיר 0 הפרות אם אפשר.
+    forced = _attempt_force(problem, time_limit=6.5, balance=True)
     if isinstance(forced, dict) and forced.get("feasible"):
         if not forced.get("violations"):
-            return _result_from_assign(problem, forced["assignments"])  # שיבוץ חוקי מלא
-        # נמצא שיבוץ מלא אך עם חריגות — מחזירים אותו עם דיווח (לא מבוי סתום)
-        return forced
+            return _result_from_assign(problem, forced["assignments"])  # מלא, חוקי, מאוזן
+        return forced  # מלא אך עם חריגות — מדווח (לא מבוי סתום)
 
-    # אפילו מילוי כפוי נכשל — אבחון (משמרות שאי-אפשר לאייש כלל)
     return _relaxed_diagnose(problem)
 
 
