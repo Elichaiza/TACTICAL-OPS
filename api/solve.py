@@ -308,30 +308,29 @@ def _attempt_force(problem, time_limit=7.0, balance=False, hard_safety=False):
             short = model.NewIntVar(0, sl["needed"], f"sp_{sl['key']}")
             model.Add(short >= sl["minSpecial"] - (sum(sp) if sp else 0))
             pen.append(short * 300)
-    # מטרה: חורים/הפרות (×10000 גוברים) ואז איזון — מזעור (maxL − minL) של הפעילים
+    # מטרה: חורים/הפרות גוברים בענק; איזון = מזעור Σload² (שונות — מאזן כל קבוצת
+    # זמינות בנפרד, לא נשלט ע"י רזרבה שעובדת פחות).
     viol = sum(pen) if pen else 0
     if unfilled:
-        viol = viol + sum(unfilled) * 10000
-    obj = viol * 10000
+        viol = viol + sum(unfilled) * 100000
     if balance:
         active = [s["id"] for s in soldiers
                   if any((sl["key"], s["id"]) in x for sl in slots)]
         bound = MAX_DAILY * 32
-        loads = {}
+        sq_terms = []
         for sid in active:
             terms = [sl["dur"] * x[(sl["key"], sid)] for sl in slots if (sl["key"], sid) in x]
             if not terms:
                 continue
             lv = model.NewIntVar(0, bound, f"ld_{sid}")
             model.Add(lv == sum(terms))
-            loads[sid] = lv
-        if loads:
-            maxL = model.NewIntVar(0, bound, "maxL")
-            minL = model.NewIntVar(0, bound, "minL")
-            for lv in loads.values():
-                model.Add(maxL >= lv)
-                model.Add(minL <= lv)
-            obj = obj + (maxL - minL)   # מצמצם פער בין הכי עמוס להכי פנוי
+            sqv = model.NewIntVar(0, bound * bound, f"sq_{sid}")
+            model.AddMultiplicationEquality(sqv, [lv, lv])
+            sq_terms.append(sqv)
+        # viol*10^10 ≫ Σload² (≤ ~10^8) ⇒ מילוי/הפרות תמיד גוברים על איזון
+        obj = viol * 10000000000 + sum(sq_terms)
+    else:
+        obj = viol
     model.Minimize(obj)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
@@ -385,7 +384,7 @@ def solve(problem):
         return diag
 
     # מסלול אמין: בטיחות קשיחה — מנוחה+מכסה+חפיפה לעולם לא נשברים; מילוי מקסימלי + איזון
-    forced = _attempt_force(problem, time_limit=45.0, balance=True, hard_safety=True)
+    forced = _attempt_force(problem, time_limit=52.0, balance=True, hard_safety=True)
     if isinstance(forced, dict) and forced.get("feasible"):
         viols = forced.get("violations", [])   # יכולים להיות רק unfilled/role/special
         gaps = [v for v in viols if v["type"] in ("unfilled", "role", "special")]
