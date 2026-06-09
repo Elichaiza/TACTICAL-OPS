@@ -2918,11 +2918,12 @@ function AssignmentTab({ dep, updateDep, notify }) {
    return { icon:'⚠', color:'#94a3b8', text:JSON.stringify(v) };
   });
  }
- /* שיבוץ — מנוע OR-Tools. אם יש חוסר, מציג הסבר + אפשרות לשיבוץ חלקי */
- async function run() {
-  const missions = dep.missions.filter(m=>selMissions.includes(m.id));
+ /* שיבוץ — מנוע OR-Tools. אם יש חוסר, מציג הסבר + אפשרות לשיבוץ חלקי.
+    missionsArg — אופציונלי; מאפשר להריץ עם משימות מתוקנות (למשל אחרי פיצול). */
+ async function run(missionsArg) {
+  const missions = missionsArg || dep.missions.filter(m=>selMissions.includes(m.id));
   if (!missions.length) return;
-  setShowWarning(false); setFeasIssues([]); setFeasPartial(null);
+  setShowWarning(false); setFeasIssues([]); setFeasPartial(null); setFeasSplits([]);
   setIsGenerating(true); setResult(null);
   // ── נסה את מנוע OR-Tools (backend); אם נכשל — fallback ל-JS V2 ──
   try {
