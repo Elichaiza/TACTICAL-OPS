@@ -2851,6 +2851,24 @@ function AssignmentTab({ dep, updateDep, notify }) {
  const att = dep.attendance||{};
  const allDates = Array.from(new Set([todayStr(),...Object.keys(att)])).sort().reverse();
  const presentSoldiers = dep.soldiers.filter(s=>getAttStatus((att[selDate]||{})[s.id])==="present");
+ /* תרגום הפרות חוק לטקסט קריא */
+ function fmtViolations(violations, missions) {
+  const sName = id => dep.soldiers.find(s=>s.id===id)?.name || id;
+  const slotInfo = (slotKey) => {
+   const sep = slotKey.lastIndexOf('__'); const mId = slotKey.slice(0,sep);
+   const si = parseInt(slotKey.slice(sep+2),10); const m = missions.find(mm=>mm.id===mId);
+   const sh = m ? computeMissionShifts(m)[si] : null;
+   return `${m?.name||mId} ${sh?`${sh.start}–${sh.end} (${fmtDate(sh.startDate)})`:''}`;
+  };
+  return (violations||[]).map(v => {
+   if (v.type==='rest')     return { icon:'😴', color:'#fb923c', text:`${sName(v.soldier)} — מנוחה ${Math.round(v.gap/60*10)/10}ש' בלבד בין ${slotInfo(v.slotA)} ל-${slotInfo(v.slotB)}` };
+   if (v.type==='daily')    return { icon:'⏱', color:'#f87171', text:`${sName(v.soldier)} — ${Math.round(v.minutes/60*10)/10}ש' ביממה (${fmtDate(v.date)}), מעל 8ש'` };
+   if (v.type==='role')     return { icon:'🎖', color:'#c4b5fd', text:`${slotInfo(v.slot)} — חסר תפקיד חובה: ${v.role}` };
+   if (v.type==='special')  return { icon:'⭐', color:'#fbbf24', text:`${slotInfo(v.slot)} — בעלי תפקיד מיוחד: ${v.have}/${v.need}` };
+   if (v.type==='unfilled') return { icon:'✗', color:'#f87171', text:`${slotInfo(v.slot)} — לא ניתן למלא כלל (${v.have}/${v.need})` };
+   return { icon:'⚠', color:'#94a3b8', text:JSON.stringify(v) };
+  });
+ }
  /* שיבוץ — מנוע OR-Tools. אם יש חוסר, מציג הסבר + אפשרות לשיבוץ חלקי */
  async function run() {
   const missions = dep.missions.filter(m=>selMissions.includes(m.id));
