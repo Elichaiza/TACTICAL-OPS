@@ -3280,6 +3280,11 @@ function AssignmentTab({ dep, updateDep, notify }) {
            </div>
           ))}
          </div>)}
+        {feasSummary.special_present!==undefined && (
+         <div style={{marginTop:10,color:"#fca5a5",fontSize:12}}>
+          ⭐ <strong>אין מספיק בעלי תפקיד מיוחד נוכחים</strong> — יש רק <strong>{feasSummary.special_present}</strong> (סמל/מפקד/קצין/מפקד משימה).
+          משימת סיור דורשת מיוחד אחד בכל משמרת + 8ש' מנוחה — צריך לפחות <strong>3</strong> נוכחים. סמן עוד בעלי-תפקיד כנוכחים, או הפחת את דרישת "מינימום מיוחד".
+         </div>)}
        </div>
       )}
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20,maxHeight:280,overflowY:"auto"}}>
