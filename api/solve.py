@@ -48,9 +48,10 @@ def _add_daily_limits(model, soldiers, slots, x):
                 model.Add(sum(terms) <= MAX_DAILY)
 
 
-def _attempt(problem, use_cap=True, time_limit=9.0):
-    """ניסיון פתרון יחיד. use_cap=True מוסיף תקרת שעות הדוקה לאיזון מהיר.
-    מחזיר: dict פתרון | {"structural": reasons} | None (אין פתרון בזמן/עם תקרה)."""
+def _attempt(problem, use_cap=True, optimize=True, time_limit=9.0):
+    """ניסיון פתרון יחיד. use_cap=True מוסיף תקרת שעות; optimize=True מוסיף מטרת
+    איזון. optimize=False = רק למצוא פתרון חוקי (מהיר ואמין).
+    מחזיר: dict פתרון | {"structural": reasons} | None (אין פתרון בזמן)."""
     soldiers = problem["soldiers"]   # [{id, role}]
     slots = problem["slots"]         # ראה build בצד הלקוח
     role_of = {s["id"]: s["role"] for s in soldiers}
@@ -144,35 +145,34 @@ def _attempt(problem, use_cap=True, time_limit=9.0):
         for sid in working:
             model.Add(load[sid] <= cap)
 
-    # ── מטרה רכה #1: איזון שעות — מזעור סכום ריבועי העומסים ──
-    # סך השעות קבוע (איוש מלא) ⇒ מזעור Σload² שקול למזעור השונות = פיזור הכי שווה.
-    # זה מאזן את *כל* החיילים סביב הממוצע, ולא רק את הקצוות (max-min).
-    sq_terms = []
-    for s in soldiers:
-        sid = s["id"]
-        sqv = model.NewIntVar(0, max_load * max_load, f"sq_{sid}")
-        model.AddMultiplicationEquality(sqv, [load[sid], load[sid]])
-        sq_terms.append(sqv)
-    sum_sq = model.NewIntVar(0, max_load * max_load * max(1, len(soldiers)), "sum_sq")
-    model.Add(sum_sq == sum(sq_terms))
+    rot = None
+    if optimize:
+        # ── מטרה #1: איזון שעות — מזעור Σload² (= מזעור שונות, איזון מושלם) ──
+        sq_terms = []
+        for s in soldiers:
+            sid = s["id"]
+            sqv = model.NewIntVar(0, max_load * max_load, f"sq_{sid}")
+            model.AddMultiplicationEquality(sqv, [load[sid], load[sid]])
+            sq_terms.append(sqv)
+        sum_sq = model.NewIntVar(0, max_load * max_load * max(1, len(soldiers)), "sum_sq")
+        model.Add(sum_sq == sum(sq_terms))
 
-    # ── מטרה רכה #2: רוטציה — קנס על אותה משימה יותר מפעם ──
-    missions = set(sl["missionId"] for sl in slots)
-    excess = []
-    for s in soldiers:
-        sid = s["id"]
-        for m in missions:
-            cnt = [x[(sl["key"], sid)] for sl in slots
-                   if sl["missionId"] == m and (sl["key"], sid) in x]
-            if len(cnt) >= 2:
-                ev = model.NewIntVar(0, len(cnt), f"ex_{sid}_{m}")
-                model.Add(ev >= sum(cnt) - 1)
-                excess.append(ev)
-    rot = model.NewIntVar(0, 100000, "rot")
-    model.Add(rot == (sum(excess) if excess else 0))
+        # ── מטרה #2: רוטציה — קנס על אותה משימה יותר מפעם ──
+        missions = set(sl["missionId"] for sl in slots)
+        excess = []
+        for s in soldiers:
+            sid = s["id"]
+            for m in missions:
+                cnt = [x[(sl["key"], sid)] for sl in slots
+                       if sl["missionId"] == m and (sl["key"], sid) in x]
+                if len(cnt) >= 2:
+                    ev = model.NewIntVar(0, len(cnt), f"ex_{sid}_{m}")
+                    model.Add(ev >= sum(cnt) - 1)
+                    excess.append(ev)
+        rot = model.NewIntVar(0, 100000, "rot")
+        model.Add(rot == (sum(excess) if excess else 0))
 
-    # האיזון דומיננטי (Σload²), הרוטציה משנית (שובר שוויון)
-    model.Minimize(sum_sq * 10000 + rot)
+        model.Minimize(sum_sq * 10000 + rot)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit
@@ -190,13 +190,12 @@ def _attempt(problem, use_cap=True, time_limit=9.0):
         spread = (max(working) - min(working)) if working else 0
         return {
             "feasible": True,
-            # פער 0 = איזון מושלם, נחשב אופטימלי גם אם הסולבר לא הוכיח זאת בזמן
             "optimal": status == cp_model.OPTIMAL or spread == 0,
             "assignments": dict(assign),
             "spread": spread,
-            "rotation": solver.Value(rot),
+            "rotation": solver.Value(rot) if rot is not None else 0,
         }
-    return None  # אין פתרון (אולי בגלל התקרה) — המתזמן ינסה בלי תקרה
+    return None  # אין פתרון בזמן הנתון
 
 
 def _scan_violations(problem, assign):
@@ -326,25 +325,34 @@ def _attempt_force(problem, time_limit=7.0):
 
 
 def solve(problem):
-    """מתזמן: ניסיון עם תקרה הדוקה (מהיר ומאוזן), ואם נכשל — בלי תקרה, ואם
-    גם זה נכשל — אבחון מלא + שיבוץ חלקי (מקסימום מילוי) להצגה ליוזר.
+    """מתזמן דו-שלבי:
+    שלב 1 — מצא פתרון חוקי כלשהו (בלי אופטימיזציה) — מהיר ואמין. אם אין —
+            הבעיה באמת לא פתירה ⇒ אבחון + שיבוץ חלקי.
+    שלב 2 — שפר לאיזון מושלם (תקרה + Σload²) בזמן שנותר. אם הצליח, מחזיר אותו;
+            אחרת מחזיר את הפתרון החוקי משלב 1 (אף פעם לא מכריז כשל על בעיה פתירה).
     mode=force → מילוי כפוי עם דיווח הפרות."""
     if problem.get("mode") == "force":
         return _attempt_force(problem)
-    capped = _attempt(problem, use_cap=True, time_limit=6.0)
-    if isinstance(capped, dict) and capped.get("feasible"):
-        return capped
-    structural = capped.get("structural") if isinstance(capped, dict) else None
-    if not structural:
-        uncapped = _attempt(problem, use_cap=False, time_limit=3.0)
-        if isinstance(uncapped, dict) and uncapped.get("feasible"):
-            return uncapped
-        structural = uncapped.get("structural") if isinstance(uncapped, dict) else None
-    # אי-היתכנות (מבנית או קיבולת) — אבחן + החזר שיבוץ חלקי
-    diag = _relaxed_diagnose(problem)
-    if structural:
-        diag["reasons"] = structural + diag.get("reasons", [])
-    return diag
+
+    # שלב 1: היתכנות (בלי מטרה, בלי תקרה) — מהיר ואמין
+    feasible = _attempt(problem, use_cap=False, optimize=False, time_limit=4.0)
+    if isinstance(feasible, dict) and feasible.get("structural"):
+        diag = _relaxed_diagnose(problem)
+        diag["reasons"] = feasible["structural"] + diag.get("reasons", [])
+        return diag
+    if not isinstance(feasible, dict) or not feasible.get("feasible"):
+        # לא נמצא פתרון חוקי — באמת לא פתיר (או קשה מאוד) ⇒ אבחון
+        return _relaxed_diagnose(problem)
+
+    # שלב 2: אופטימיזציה לאיזון — אם מצליח בזמן, עדיף; אחרת נשארים עם החוקי
+    optimized = _attempt(problem, use_cap=True, optimize=True, time_limit=5.0)
+    if isinstance(optimized, dict) and optimized.get("feasible"):
+        return optimized
+    # תקרה גרמה לקושי/אי-היתכנות — נסה אופטימיזציה בלי תקרה בזמן קצר
+    opt2 = _attempt(problem, use_cap=False, optimize=True, time_limit=3.0)
+    if isinstance(opt2, dict) and opt2.get("feasible"):
+        return opt2
+    return feasible  # פתרון חוקי (אולי לא מאוזן לגמרי) — עדיף מכשל שגוי
 
 
 def _relaxed_diagnose(problem):
