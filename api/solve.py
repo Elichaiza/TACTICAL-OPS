@@ -387,9 +387,17 @@ def solve(problem):
                  for v in viols if v["type"] == "unfilled"]
         role_r = [{"type": "missing_role", "slot": v["slot"], "role": v["role"]}
                   for v in viols if v["type"] == "role"]
-        return {"feasible": False, "reasons": role_r + [{"type": "holes", "holes": holes}],
-                "summary": _diagnose_summary(problem, holes),
-                "partial": dict(forced["assignments"])}
+        special_r = [{"type": "few_special", "slot": v["slot"],
+                      "have": v.get("have", 0), "need": v.get("need", 0)}
+                     for v in viols if v["type"] == "special"]
+        summary = _diagnose_summary(problem, holes)
+        # ספירת בעלי-תפקיד-מיוחד נוכחים — להסבר ברור על מחסור
+        _roles = {s["id"]: s["role"] for s in problem["soldiers"]}
+        n_special = len({sid for sl in problem["slots"] for sid in sl["eligible"]
+                         if _roles.get(sid) in SPECIAL_ROLES})
+        summary["special_present"] = n_special
+        return {"feasible": False, "reasons": role_r + special_r + [{"type": "holes", "holes": holes}],
+                "summary": summary, "partial": dict(forced["assignments"])}
 
     return _relaxed_diagnose(problem)
 
