@@ -1452,6 +1452,43 @@ function _addDaysStr(dateStr, days) {
  const dt = new Date(Date.UTC(y, m - 1, d) + days * 86400000);
  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`;
 }
+/* נוכחות רצופה: מאחד את חלונות הנוכחות של החייל מהימים הסמוכים (אתמול+היום+מחר)
+   לרצף אחד, ובודק אם המשמרת [sAbs,eAbs] נכנסת *כולה* בתוך רצף נוכחות.
+   כך נוכחות "יום קודם מלא + היום 10:00–15:00" מתמזגת ל-[10:00 אתמול → 15:00 היום]
+   רציף, ומשמרת 06:00–14:00 (שתחילתה לפני גבול היממה) נכנסת בפנים.
+   boundaryMin = שעת תחילת היממה הצבאית בדקות (10:00 = 600).
+   יממה מלאה (from===to / אין חלון) = [D 00:00 .. D+1 גבול] — מכסה את כל היום
+   הקלנדרי כולל הבוקר המוקדם, וגם את בוקר המחרת עד הגבול. */
+function _presenceCovers(fullAtt, sid, sAbs, eAbs, startDate, boundaryMin = 600) {
+ const dates = [_addDaysStr(startDate, -1), startDate, _addDaysStr(startDate, 1)];
+ const ivs = [];
+ for (const D of dates) {
+  const att = (fullAtt[D] || {})[sid];
+  if (getAttStatus(att) !== 'present') continue;
+  const base = _toAbs(D, '00:00');
+  let fromStr = null, toStr = null;
+  if (att && typeof att === 'object') {
+   fromStr = getAttField(att, 'from', null);
+   toStr   = getAttField(att, 'to',   null);
+  }
+  if (fromStr == null || toStr == null || fromStr === toStr) {
+   ivs.push([base, base + 1440 + boundaryMin]);            // יממה מלאה
+  } else {
+   let fA = base + timeToMins(fromStr);
+   let tA = base + timeToMins(toStr);
+   if (tA <= fA) tA += 1440;                                // חלון שגולש ללילה
+   ivs.push([fA, tA]);
+  }
+ }
+ ivs.sort((a, b) => a[0] - b[0]);
+ const merged = [];
+ for (const iv of ivs) {
+  const last = merged[merged.length - 1];
+  if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1]);
+  else merged.push(iv);
+ }
+ return merged.some(iv => sAbs >= iv[0] && eAbs <= iv[1]);
+}
 /* בונה את בעיית ה-CSP לשליחה ל-backend — כולל זכאות פר-משמרת */
 function buildSolverProblem(missions, soldiers, fullAtt, pinnedAssignments = {}) {
  const slots = [];
