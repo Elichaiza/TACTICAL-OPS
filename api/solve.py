@@ -24,26 +24,31 @@ def _conflict(a, b):
     return gap < MIN_REST
 
 
-def _add_daily_limits(model, soldiers, slots, x):
-    """מכסת 8ש' לכל חלון יממה צבאית (10:00→10:00).
-    סופר את החפיפה האמיתית של כל משמרת עם כל חלון — כולל משמרות
-    שחוצות את גבול ה-10:00 (מתפצלות בין שני חלונות)."""
-    # חלונות מתחילים ב-10:00 (=600 דק') כל 1440 דק'
-    starts = set()
+def _quota_key(sl):
+    """ליום-המכסה של משמרת: אם היא חוצה את גבול 10:00 — *כל* המשמרת נספרת ליממה
+    שאליה היא נכנסת (לא מתפצלת). אחרת — היממה שמכילה אותה. (10:00 = 600 דק')."""
+    s, e = sl["startAbs"], sl["endAbs"]
+    k = (s - 600) // 1440
+    nb = 600 + (k + 1) * 1440      # גבול 10:00 הבא אחרי תחילת המשמרת
+    if s < nb < e:                 # המשמרת חוצה את ה-10:00
+        return nb                  # נספרת במלואה ליממה שמתחילה ב-nb
+    return 600 + k * 1440          # היממה שמכילה את המשמרת
+
+
+def _soldier_quota_groups(slots, x, sid):
+    """מקבץ את משמרות החייל לפי יום-מכסה → [איברי משך]."""
+    groups = {}
     for sl in slots:
-        k = (sl["startAbs"] - 600) // 1440
-        starts.update((k - 1, k, k + 1))
+        if (sl["key"], sid) not in x:
+            continue
+        groups.setdefault(_quota_key(sl), []).append(sl["dur"] * x[(sl["key"], sid)])
+    return groups
+
+
+def _add_daily_limits(model, soldiers, slots, x):
+    """מכסת 8ש' ליממה צבאית — משמרת שחוצה 10:00 נספרת במלואה ליום שאליו נכנסה."""
     for s in soldiers:
-        sid = s["id"]
-        for k in starts:
-            ws = 600 + k * 1440
-            terms = []
-            for sl in slots:
-                if (sl["key"], sid) not in x:
-                    continue
-                ov = min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)
-                if ov > 0:
-                    terms.append(ov * x[(sl["key"], sid)])
+        for terms in _soldier_quota_groups(slots, x, s["id"]).values():
             if terms:
                 model.Add(sum(terms) <= MAX_DAILY)
 
@@ -199,15 +204,14 @@ def _scan_violations(problem, assign):
                 if 0 <= gap < MIN_REST:
                     V.append({"type": "rest", "soldier": sid,
                               "slotA": ss[i]["key"], "slotB": ss[j]["key"], "gap": gap})
-        starts = set()
+        day_tot = {}
         for sl in sls:
-            k = (sl["startAbs"] - 600) // 1440
-            starts.update((k - 1, k, k + 1))
-        for k in starts:
-            ws = 600 + k * 1440
-            tot = sum(max(0, min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)) for sl in sls)
+            qk = _quota_key(sl)
+            day_tot[qk] = day_tot.get(qk, 0) + sl["dur"]
+        for qk, tot in day_tot.items():
             if tot > MAX_DAILY:
-                V.append({"type": "daily", "soldier": sid, "date": _date_from_k(k), "minutes": tot})
+                V.append({"type": "daily", "soldier": sid,
+                          "date": _date_from_k((qk - 600) // 1440), "minutes": tot})
     for k, sl in slots.items():
         got = assign.get(k, [])
         if len(got) < sl["needed"]:
@@ -271,28 +275,17 @@ def _attempt_force(problem, time_limit=7.0, balance=False, hard_safety=False):
                         v = model.NewBoolVar(f"rest_{a['key']}_{b['key']}_{sid}")
                         model.Add(v >= x[(a["key"], sid)] + x[(b["key"], sid)] - 1)
                         pen.append(v * 100)
-    starts = set()
-    for sl in slots:
-        k = (sl["startAbs"] - 600) // 1440
-        starts.update((k - 1, k, k + 1))
+    # מכסה יומית — משמרת שחוצה 10:00 נספרת במלואה ליום שאליו נכנסה (_quota_key)
     for s in soldiers:
-        sid = s["id"]
-        for k in starts:
-            ws = 600 + k * 1440
-            terms = []
-            for sl in slots:
-                if (sl["key"], sid) not in x:
-                    continue
-                ov = min(sl["endAbs"], ws + 1440) - max(sl["startAbs"], ws)
-                if ov > 0:
-                    terms.append(ov * x[(sl["key"], sid)])
-            if terms:
-                if hard_safety:
-                    model.Add(sum(terms) <= MAX_DAILY)  # מכסה יומית — קשיח
-                else:
-                    ex = model.NewIntVar(0, 100000, f"ex_{sid}_{k}")
-                    model.Add(ex >= sum(terms) - MAX_DAILY)
-                    pen.append(ex)  # מכסה יומית — דקות חריגה
+        for qi, terms in enumerate(_soldier_quota_groups(slots, x, s["id"]).values()):
+            if not terms:
+                continue
+            if hard_safety:
+                model.Add(sum(terms) <= MAX_DAILY)  # מכסה יומית — קשיח
+            else:
+                ex = model.NewIntVar(0, 100000, f"ex_{s['id']}_{qi}")
+                model.Add(ex >= sum(terms) - MAX_DAILY)
+                pen.append(ex)  # מכסה יומית — דקות חריגה
     for sl in slots:
         for r in sl.get("mandatory", []):
             rv = [x[(sl["key"], sid)] for sid in sl["eligible"] if role_of.get(sid) == r]
